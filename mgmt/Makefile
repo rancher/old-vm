@@ -24,7 +24,7 @@ tag_latest:
 	docker tag -f $(NAME):$(VERSION) $(NAME):latest
 
 run:
-	docker run --cap-add NET_ADMIN -it -v /vmmgmt \
+	docker run --cap-add NET_ADMIN -it \
 	-v /var/run/docker.sock:/var/run/docker.sock \
 	-p 8080:80 \
 	$(NAME):$(VERSION)

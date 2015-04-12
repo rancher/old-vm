@@ -9,5 +9,5 @@ COPY startmgmt /var/lib/rancher/startmgmt
 COPY self.pem /var/lib/rancher/self.pem
 COPY noVNC-0.0.2 /var/lib/rancher/noVNC-0.0.2
 ENTRYPOINT ["/var/lib/rancher/startmgmt"]
+VOLUME /vmmgmt
 CMD []
-

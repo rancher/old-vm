@@ -104,6 +104,10 @@ if form.getvalue("action") == "create":
 
     kvm_args = "-m " + mem + " -smp " + cpu
     try:
+        try:
+            docker_client.inspect_image(image)
+        except docker.errors.APIError:
+            docker_client.pull(image)
         container = docker_client.create_container( \
             image = image, \
             volumes = "/image", \

@@ -1,0 +1,59 @@
+#!/usr/bin/python
+
+# This script is invoked by inotifywait when a new VM is about to be launched.
+# It reads network configuration saved by the startvm script and updates the
+# /etc/dnsmasq.conf file.
+
+import os
+import json
+import logging
+import stat
+import sys
+
+prefix_dir = "/vmmgmt/vm"
+
+entries = (os.path.join(prefix_dir, fn) for fn in os.listdir(prefix_dir))
+entries = ((os.stat(path)[stat.ST_CTIME], path) for path in entries)
+vm_list = [os.path.basename(path) for ctime, path in sorted(entries)]
+
+if vm_list == []:
+    sys.exit()
+
+latest_gateway = None
+latest_nameserver = None
+latest_netmask = None
+
+conf_file = open("/etc/dnsmasq.conf", "w")
+
+conf_file.write("user=root\n")
+
+for vm in vm_list:
+    with open(prefix_dir + "/" + vm + "/vm.conf") as vm_conf_file:
+        conf = json.load(vm_conf_file)
+
+        hostname = conf.get("hostname")
+        ip = conf.get("ip")
+        latest_netmask = conf.get("netmask")
+        mac = conf.get("mac")
+        latest_nameserver = conf.get("nameserver")
+        latest_gateway = conf.get("gateway")
+
+        conf_file.write("dhcp-range=" + ip + "," + ip + "\n")
+        conf_file.write("dhcp-host=" + mac + "," + hostname + "," + ip + "\n") 
+
+conf_file.write("dhcp-option=option:router," + latest_gateway + "\n")
+conf_file.write("dhcp-option=option:netmask," + latest_netmask + "\n")
+conf_file.write("dhcp-option=option:dns-server," + 
+    latest_nameserver.replace(" ", ",") + "\n")
+
+conf_file.close()
+
+# We kill and restart dnsmasq. It's not sufficient to send HUP signal.
+# dnsmasq does not read the config file when it receives the HUP signal
+
+dnsmasq_pid_file = "/var/run/dnsmasq.pid"
+
+if os.path.exists(dnsmasq_pid_file):
+    with open (dnsmasq_pid_file, "r") as pidfile:
+        os.system("kill " + pidfile.read())
+os.system("dnsmasq")

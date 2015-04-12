@@ -1,0 +1,34 @@
+# RancherVM
+
+Package and run KVM images as Docker containers
+
+## Build
+
+Just type `make`
+
+## Run
+
+First, ensure Docker and KVM are both installed on your system. Follow the
+distribution-specific instructions to ensure KVM works. On Ubuntu 14.04, you
+can type `kvm-ok` to make sure KVM is supported.
+
+```
+$ kvm-ok
+INFO: /dev/kvm exists
+KVM acceleration can be used
+```
+
+An easy way to run KVM on your Windows or Mac laptop is to use nested
+virtualization with VMware Workstation or VMware Fusion. Just enable
+"Virtualize Intel VT-x/EPT or AMD-V/RVI" in VM Settings.
+
+Once you have Docker and KVM both setup, run:
+
+```
+        docker run --cap-add NET_ADMIN -it -v /vmmgmt \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -p 8080:80 \
+        rancher/vmmgmt:0.0.1
+```
+
+and point your browser to `http://<KVM hostname>:8080`

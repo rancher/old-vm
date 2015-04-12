@@ -1,0 +1,117 @@
+#!/bin/bash
+
+set -x
+
+# These two variables can be overwritten in Dockerfile
+: ${KVM_BLK_DEV:=virtio-blk-pci,scsi=off,bus=pci.0,addr=0x6,id=virtio-disk0}
+: ${KVM_NET_DEV:=virtio-net-pci}
+
+# For debugging
+if [ "$1" = "bash" ]; then
+  exec bash
+fi
+
+# Pass Docker command args to kvm
+KVM_ARGS=$@
+
+# Create the qcow disk image on the Docker volume named /image, using
+# the compress qcow image in Docker container as the base.
+# Docker volumes typically have better performance than the file system for
+# Docker images
+
+BASE_IMAGE_DIR_LIST=( `ls /base_image` )
+if [ ${#BASE_IMAGE_DIR_LIST[@]} -ne 1 ]; then
+  echo "/base_image directory must contain exactly one base image file"
+  exit 1
+fi
+
+if [ ! -d "/image" ]; then
+  echo "/image directory does not exist, failed to mount volume /image?"
+  exit 2
+fi
+
+KVM_IMAGE=/image/sda.qcow2
+if [ ! -f "$KVM_IMAGE" ]; then
+  qemu-img create -f qcow2 -b /base_image/${BASE_IMAGE_DIR_LIST[0]} $KVM_IMAGE
+fi
+
+# Network setup:
+#
+# 1. Save network config away for the management container to config dnsmasq
+# 2. Create a bridge named br0
+# 3. Remove IP and MAC from eth0, give eth0 a random MAC
+
+IFACE=eth0
+BRIDGE_IFACE=br0
+
+cidr2mask() {
+  local i mask=""
+  local full_octets=$(($1/8))
+  local partial_octet=$(($1%8))
+
+  for ((i=0;i<4;i+=1)); do
+    if [ $i -lt $full_octets ]; then
+      mask+=255
+    elif [ $i -eq $full_octets ]; then
+      mask+=$((256 - 2**(8-$partial_octet)))
+    else
+      mask+=0
+    fi  
+    test $i -lt 3 && mask+=.
+  done
+
+  echo $mask
+}
+
+MAC=`ip addr show $IFACE | grep ether | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*\$//g' | cut -f2 -d ' '`
+IP=`ip addr show dev $IFACE | grep 'inet ' | awk '{print $2}' | cut -f1 -d/`
+CIDR=`ip addr show dev $IFACE | grep 'inet ' | awk '{print $2}' | cut -f2 -d/`
+NETMASK=`cidr2mask $CIDR`
+GATEWAY=`ip route get 8.8.8.8 | grep via | cut -f3 -d ' '`
+NAMESERVER=( `grep nameserver /etc/resolv.conf | cut -f2 -d ' '` )
+
+DOCKERID=`cat /proc/self/cgroup | grep cpu | cut -f 3 -d / | head -1`
+
+mkdir -p /vmmgmt/vm/$DOCKERID
+
+cat > /vmmgmt/vm/$DOCKERID/vm.conf << EOF
+{
+  "hostname": "$HOSTNAME",
+  "mac": "$MAC",
+  "ip": "$IP",
+  "netmask": "$NETMASK",
+  "gateway": "$GATEWAY",
+  "nameserver": "${NAMESERVER[*]}",
+  "KVM_ARGS": "$KVM_ARGS"
+}
+EOF
+
+NOTIFY_DNSMASQ=/vmmgmt/newvm.notify
+touch $NOTIFY_DNSMASQ
+
+hexchars="0123456789ABCDEF"
+end=$( for i in {1..8} ; do echo -n ${hexchars:$(( $RANDOM % 16 )):1} ; done | sed -e 's/\(..\)/:\1/g' )
+NEWMAC=`echo 06:FE$end`
+
+ip link set dev $IFACE down
+ip link set $IFACE address $NEWMAC
+ip addr flush dev $IFACE
+
+brctl addbr $BRIDGE_IFACE
+brctl addif $BRIDGE_IFACE $IFACE
+ip link set dev $IFACE up
+ip link set dev $BRIDGE_IFACE up
+
+# Exec kvm as PID 1, bridge kvm to br0
+
+echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf 
+
+rm /vmmgmt/vm/$DOCKERID/vnc
+
+exec kvm -vnc unix:/vmmgmt/vm/$DOCKERID/vnc \
+-monitor unix:/vmmgmt/vm/$DOCKERID/monitor,server,nowait \
+-drive file=$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
+-device $KVM_BLK_DEV,drive=drive-disk0,bootindex=1 \
+-netdev bridge,br=$BRIDGE_IFACE,id=net0 \
+-device $KVM_NET_DEV,netdev=net0,mac=$MAC \
+$KVM_EXTRA_ARGS $KVM_ARGS

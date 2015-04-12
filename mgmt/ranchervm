@@ -1,0 +1,237 @@
+#!/usr/bin/python
+
+import re
+import os
+import sys
+import json
+import logging
+import stat
+import docker
+import time
+import random
+import string
+import cgi
+
+form = cgi.FieldStorage()
+
+def print_html_headers(title):
+    print """Content-type:text/html
+
+<html>
+<head>
+<title>{title}</title>
+</head>
+<body>
+""".format(**vars())
+
+def print_html_footers():
+    print """</body>
+</html>
+"""
+
+def exit_script(title, msg, code):
+    print_html_headers(title)
+    print msg
+    print """
+<form method="link" action="ranchervm">
+<input type="submit" value="Ok">
+</form>
+"""
+    print_html_footers()
+    sys.exit(code)
+
+
+if form.getvalue("action") == "create_form":
+    random_string = ''.join(random.choice(string.ascii_lowercase + \
+              string.digits) for _ in range(6))
+
+    print_html_headers("RancherVM")
+
+    print """
+<form method="POST" action="ranchervm">
+<input type="hidden" name="action" value="create">
+<table>
+<tr> <td>Hostname:</td> 
+     <td><input type="text" name="hostname" value="{random_string}"></td></tr>
+<tr> <td>Image:</td> 
+     <td><input type="text" name="image" value="rancher/rancheros:0.2.1"></td></tr>
+<tr> <td>Memory Size:</td> 
+     <td><input type="text" name="mem" value="512m"></td></tr>
+<tr> <td># of vCPUs:</td> 
+     <td><input type="text" name="cpu" value="1"></td></tr>
+</table>
+<input type="submit" value="Create">
+</form>
+""".format(**vars())
+    sys.exit()
+
+docker_client = docker.Client(base_url='unix://var/run/docker.sock')
+
+def get_my_id():
+    with open ("/proc/self/cgroup", "r") as cgroup_file:
+        return re.findall(":cpu:/docker/\S+", 
+                          cgroup_file.read())[0][13:]
+
+
+if form.getvalue("action") == "create":
+    hostname = form.getvalue('hostname')
+    image = form.getvalue('image')
+    mem = form.getvalue('mem')
+    cpu = form.getvalue('cpu')
+
+    def check_hostname(hostname):
+        if len(hostname) > 16 or \
+           re.compile("[^a-zA-Z\d\-]").search(hostname):
+           exit_script("Error", "Hostname must be an alpha numerical" \
+                       " string up to 16 characters long.", 1) 
+
+    def check_image(image):
+        if re.compile("[^a-zA-Z\d\-\.\/:]").search(image):
+           exit_script("Error", "Bad image name", 1)
+
+    def check_mem(mem):
+        if not re.compile("^[\d]+[mMgG]$").match(mem):
+           exit_script("Error", "Bad memory size", 1)
+
+    def check_cpu(cpu):
+        if not re.compile("^[\d]+$").match(cpu):
+           exit_script("Error", "Bad vCPU count", 1)
+
+    check_hostname(hostname)
+    check_image(image)
+    check_mem(mem)
+    check_cpu(cpu)
+
+    kvm_args = "-m " + mem + " -smp " + cpu
+    try:
+        container = docker_client.create_container( \
+            image = image, \
+            volumes = "/image", \
+            command = kvm_args, \
+            hostname = hostname, \
+            detach = True, \
+            stdin_open = True, \
+            tty = True)
+        docker_client.start(container, \
+                            devices=['/dev/kvm:/dev/kvm:rwm', \
+                                     '/dev/net/tun:/dev/net/tun:rwm'], \
+                            cap_add=['NET_ADMIN'], \
+                            volumes_from = get_my_id())
+    except docker.errors.APIError as e: exit_script("Error", str(e), 1)
+    exit_script("Created", "Instance " + hostname + " created", 0)
+
+if form.getvalue("action") == "delete":
+    id = form.getvalue("id")
+    try:
+        docker_client.remove_container(id);
+    except docker.errors.APIError as e: exit_script("Error", str(e), 1)
+    exit_script("Deleted", "Instance " + id + " removed", 0)
+
+if form.getvalue("action") == "start":
+    id = form.getvalue("id")
+    try:
+        docker_client.start(id, \
+                            devices=['/dev/kvm:/dev/kvm:rwm', \
+                                     '/dev/net/tun:/dev/net/tun:rwm'], \
+                            cap_add=['NET_ADMIN'], \
+                            volumes_from = get_my_id())
+    except docker.errors.APIError as e: exit_script("Error", str(e), 1)
+    exit_script("Started", "Instance " + id + " started", 0)
+
+if form.getvalue("action") == "stop":
+    id = form.getvalue("id")
+    try:
+        docker_client.stop(id, 15)
+    except docker.errors.APIError as e: exit_script("Error", str(e), 1)
+    exit_script("Stopped", "Instance " + id + " stopped", 0)
+
+
+
+prefix_dir = "/vmmgmt/vm"
+
+entries = (os.path.join(prefix_dir, fn) for fn in os.listdir(prefix_dir))
+entries = ((os.stat(path)[stat.ST_CTIME], path) for path in entries)
+vm_list = [os.path.basename(path) for ctime, 
+		path in sorted(entries, reverse=True)]
+
+containers = {c.get("Id"): c for c in docker_client.containers(all=True)}
+
+container_list = []
+
+for vm in vm_list:
+    container = containers.get(vm)
+    if container == None:
+        import shutil
+        shutil.rmtree(prefix_dir + "/" + vm, ignore_errors=True)
+    else:
+        container_list.append(container)
+
+print_html_headers("RancherVM")
+
+print """
+
+<form method="link" action="ranchervm">
+<input type="hidden" name="action" value="create_form">
+<input type="submit" value="Create Instance">
+</form>
+"""
+if container_list == []:
+    print "No instances found."
+else:
+    print """
+<table>
+<tr>
+<th>Action</th>
+<th>Name</th>
+<th>IP</th>
+<th>Image</th>
+<th>Status</th>
+<th>Ports</th>
+<th>Created</th>
+<th>KVM_ARGS</th>
+</tr>
+"""
+
+    for container in container_list:
+        id = container.get("Id")
+        with open(prefix_dir + "/" + id + "/vm.conf") as vm_conf_file:
+            conf = json.load(vm_conf_file)
+
+            hostname = conf.get("hostname")
+            ip = conf.get("ip")
+            kvm_args = conf.get("KVM_ARGS")
+
+            image = container.get("Image")
+            status = container.get("Status")
+            created = time.ctime(container.get("Created"))
+            ports = container.get("Ports")
+
+            if status.startswith("Up"):
+                start_stop_action = "<a href=\"ranchervm?action=stop&id=" \
+                    + id + "\">Stop</a>"
+                console_delete_action = "<a href=\"/vnc_auto.html?title=" \
+                    + hostname + "&path=" + prefix_dir[1:] + "/"  \
+                    + id + "/vnc\" target=\"_blank\">Console</a>"
+
+            else:
+                start_stop_action = "<a href=\"ranchervm?action=start&id=" \
+                    + id + "\">Start</a>"
+                console_delete_action = "<a href=\"ranchervm?action=delete&id=" \
+                    + id + "\">Delete</a>"
+
+            print '<tr>'
+            print ("<td>" + start_stop_action + " " \
+                          + console_delete_action + "</td>")
+            print ("<td>" + hostname + "</td>")
+            print ("<td>" + ip + "</td>")
+            print ("<td>" + image + "</td>")
+            print ("<td>" + status + "</td>")
+            print ("<td>" + str(ports) + "</td>")
+            print ("<td>" + created + "</td>")
+            print ("<td>" + kvm_args + "</td>")
+            print '</tr>'
+
+    print """</table>
+"""
+
+print_html_footers()

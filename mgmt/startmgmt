@@ -1,0 +1,23 @@
+#!/bin/bash
+
+if [ "$1" = "bash" ]; then
+  exec bash
+fi
+
+cd /var/lib/rancher
+
+NOVNC=/var/lib/rancher/noVNC-0.0.2
+
+mkdir -p /vmmgmt/vm
+
+# Fork a loop in the background to listen for new VM starts.
+touch /vmmgmt/newvm.notify
+while true; do
+  if inotifywait -e attrib /vmmgmt/newvm.notify; then
+    echo "VM created, regenerating dnsmasq conf..."
+    /var/lib/rancher/gen_dnsmasq_conf
+  fi
+done > inotifywait.log 2>&1 &
+
+# Start the websocket proxy and the web server with CGI support
+python $NOVNC/utils/websockify --web $NOVNC --cert /var/lib/rancher/self.pem 80 --unix-target /vmmgmt/vm

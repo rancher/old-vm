@@ -2,9 +2,12 @@
 
 set -x
 
-# These two variables can be overwritten in Dockerfile
-: ${KVM_BLK_DEV:=virtio-blk-pci,scsi=off,bus=pci.0,addr=0x6,id=virtio-disk0}
-: ${KVM_NET_DEV:=virtio-net-pci}
+# These two variables can be overwritten
+
+: ${KVM_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
+-device virtio-blk-pci,scsi=off,bus=pci.0,addr=0x6,drive=drive-disk0,id=virtio-disk0,bootindex=1"}
+: ${KVM_NET_OPTS:="-netdev bridge,br=\$BRIDGE_IFACE,id=net0 \
+-device virtio-net-pci,netdev=net0,mac=\$MAC"}
 
 # For debugging
 if [ "$1" = "bash" ]; then
@@ -106,12 +109,8 @@ ip link set dev $BRIDGE_IFACE up
 
 echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf 
 
-rm /vmmgmt/vm/$DOCKERID/vnc
-
 exec kvm -vnc unix:/vmmgmt/vm/$DOCKERID/vnc \
 -monitor unix:/vmmgmt/vm/$DOCKERID/monitor,server,nowait \
--drive file=$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
--device $KVM_BLK_DEV,drive=drive-disk0,bootindex=1 \
--netdev bridge,br=$BRIDGE_IFACE,id=net0 \
--device $KVM_NET_DEV,netdev=net0,mac=$MAC \
-$KVM_EXTRA_ARGS $KVM_ARGS
+`eval echo $KVM_BLK_OPTS` \
+`eval echo $KVM_NET_OPTS` \
+$KVM_ARGS $KVM_EXTRA_ARGS

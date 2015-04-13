@@ -1,18 +1,19 @@
 NAME = rancher/rancheros
 VERSION = 0.2.1
+BASE_IMAGE=rancheros-0.2.1-gz.img
 
 .PHONY : all clean build
 
 all: build
 
-build: rancheros-0.2.1-gz.img
+build: $(BASE_IMAGE)
 	docker build -t $(NAME):$(VERSION) .
 
-rancheros-0.2.1-gz.img:
-	wget https://s3-us-west-1.amazonaws.com/sheng/qcow2/rancheros-0.2.1-gz.img
+$(BASE_IMAGE):
+	wget https://s3-us-west-1.amazonaws.com/sheng/qcow2/$(BASE_IMAGE)
 
 clean:
-	rm -f rancheros-0.2.1-gz.img
+	rm -f $(BASE_IMAGE)
 
 tag_latest:
 	docker tag -f $(NAME):$(VERSION) $(NAME):latest

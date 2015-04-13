@@ -1,18 +1,19 @@
 NAME = rancher/ubuntu
 VERSION = 14.04
+BASE_IMAGE=ubuntu-14.04-amd64.img
 
 .PHONY : all clean build
 
 all: build
 
-build: ubuntu-14.04-amd64.img
+build: $(BASE_IMAGE)
 	docker build -t $(NAME):$(VERSION) .
 
-ubuntu-14.04-amd64.img:
-	wget https://s3-us-west-1.amazonaws.com/sheng/qcow2/ubuntu-14.04-amd64.img
+$(BASE_IMAGE):
+	wget https://s3-us-west-1.amazonaws.com/sheng/qcow2/$(BASE_IMAGE)
 
 clean:
-	rm -f ubuntu-14.04-amd64.img
+	rm -f $(BASE_IMAGE)
 
 tag_latest:
 	docker tag -f $(NAME):$(VERSION) $(NAME):latest

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -x
+#set -x
 
 # These two variables can be overwritten
 
@@ -46,9 +46,6 @@ fi
 IFACE=eth0
 BRIDGE_IFACE=br0
 
-NOTIFY_DNSMASQ=/vmmgmt/newvm.notify
-touch $NOTIFY_DNSMASQ
-
 MAC=`ip addr show $IFACE | grep ether | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*\$//g' | cut -f2 -d ' '`
 
 # Generate random new MAC address
@@ -70,10 +67,13 @@ ip link set dev $BRIDGE_IFACE up
 echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf 
 
 DOCKERID=`cat /proc/self/cgroup | grep cpu | cut -f 3 -d / | head -1`
-mkdir -p /vmmgmt/vm/$DOCKERID
 
-exec kvm -vnc unix:/vmmgmt/vm/$DOCKERID/vnc \
--monitor unix:/vmmgmt/vm/$DOCKERID/monitor,server,nowait \
+if [ -d /vmmgmt ]; then
+    mkdir -p /vmmgmt/vm/$DOCKERID
+    VNC="-vnc unix:/vmmgmt/vm/$DOCKERID/vnc"
+fi
+
+exec kvm $VNC \
 `eval echo $KVM_BLK_OPTS` \
 `eval echo $KVM_NET_OPTS` \
 $KVM_ARGS $KVM_EXTRA_ARGS

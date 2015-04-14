@@ -247,7 +247,6 @@ if form.getvalue("action") == "create":
             docker_client.pull(image)
         container = docker_client.create_container(
             image = image,
-            volumes = "/image",
             environment = ["RANCHER_VM=true"],
             command = kvm_args,
             hostname = hostname,

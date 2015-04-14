@@ -16,4 +16,4 @@ clean:
 test:
 	docker run --cap-add NET_ADMIN -it --volumes-from $(mgmt) \
 	--device /dev/kvm:/dev/kvm --device /dev/net/tun:/dev/net/tun \
-	-v /image $(NAME):$(VERSION) bash
+	$(NAME):$(VERSION) bash

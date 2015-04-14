@@ -12,8 +12,6 @@ import random
 import string
 import cgi
 
-prefix_dir = "/vmmgmt/vm"
-
 form = cgi.FieldStorage()
 
 def print_html_headers(title):
@@ -44,7 +42,7 @@ def exit_script(title, msg, code):
 
 
 if form.getvalue("action") == "create_form":
-    random_string = ''.join(random.choice(string.ascii_lowercase + \
+    random_string = ''.join(random.choice(string.ascii_lowercase +
               string.digits) for _ in range(6))
 
     print_html_headers("RancherVM")
@@ -62,7 +60,7 @@ if form.getvalue("action") == "create_form":
 <tr> <td># of vCPUs:</td> 
      <td><input type="text" name="cpu" value="1"></td></tr>
 <tr> <td>Port mappings:</td> 
-     <td><input type="text" name="ports" value="80"> A comma-separated list of port mappings specified in <tt>docker run -p</tt> command line syntax</td></tr>
+     <td><input type="text" name="ports" value="80"> A comma-separated list of port mappings specified in <tt>docker run -p</tt> command line syntax. Range not supported</td></tr>
 </table>
 <input type="submit" value="Create">
 </form>
@@ -133,11 +131,11 @@ def parse_port_mappings(src_list_str):
     
     def parse_port():
         port = parse_port_number()
-        type, _ = peek_token()
-        if type == "-":
-            get_token()
-            high_port = parse_port_number()
-            return port + "-" + high_port
+#        type, _ = peek_token()
+#        if type == "-":
+#            get_token()
+#            high_port = parse_port_number()
+#            return port + "-" + high_port
         return port
     
     def parse_container_port():
@@ -168,7 +166,7 @@ def parse_port_mappings(src_list_str):
         if next_ptr == len(src_str): return ("EOF", "")
         if src_str[next_ptr] == "/": return ("/", "/")
         if src_str[next_ptr] == ":": return (":", ":")
-        if src_str[next_ptr] == "-": return ("-", "-")
+#        if src_str[next_ptr] == "-": return ("-", "-")
         if src_str[next_ptr] == ",": return (",", ",")
         for type, pattern in token_patterns:
             match = pattern.match(src_str[next_ptr:])
@@ -192,7 +190,7 @@ def parse_port_mappings(src_list_str):
         global next_ptr
         raise Exception(msg + " at charactor " + str(next_ptr + 1))
 
-    return {x.keys()[0] : x.values()[0] for x in \
+    return {x.keys()[0] : x.values()[0] for x in
                 map(parse_port_map, src_list_str.split(","))}
 
 def get_my_id():
@@ -246,26 +244,22 @@ if form.getvalue("action") == "create":
             docker_client.inspect_image(image)
         except docker.errors.APIError:
             docker_client.pull(image)
-        container = docker_client.create_container( \
-            image = image, \
-            volumes = "/image", \
-            command = kvm_args, \
-            hostname = hostname, \
-            detach = True, \
-            stdin_open = True, \
-            ports = container_ports, \
+        container = docker_client.create_container(
+            image = image,
+            volumes = "/image",
+            environment = ["RANCHER_VM=true"],
+            command = kvm_args,
+            hostname = hostname,
+            detach = True,
+            stdin_open = True,
+            ports = container_ports,
             tty = True)
 
-        conf_dir = prefix_dir + "/" + container.get("Id")
-        os.mkdir(conf_dir)
-        with open(conf_dir + "/ports", "w+") as ports_file:
-            json.dump(port_mappings, ports_file)
-
-        docker_client.start(container, \
-                            devices=['/dev/kvm:/dev/kvm:rwm', \
-                                     '/dev/net/tun:/dev/net/tun:rwm'], \
-                            cap_add=['NET_ADMIN'], \
-                            port_bindings = port_mappings, \
+        docker_client.start(container,
+                            devices=['/dev/kvm:/dev/kvm:rwm',
+                                     '/dev/net/tun:/dev/net/tun:rwm'],
+                            cap_add=['NET_ADMIN'],
+                            port_bindings = port_mappings,
                             volumes_from = get_my_id())
     except docker.errors.APIError as e: exit_script("Error", str(e), 1)
     exit_script("Created", "Instance " + hostname + " created", 0)
@@ -279,15 +273,28 @@ if form.getvalue("action") == "delete":
 
 if form.getvalue("action") == "start":
     id = form.getvalue("id")
-    with open(prefix_dir + "/" + id + "/ports", "r") as ports_file:
-        port_mappings = json.load(ports_file)
+    container_details = docker_client.inspect_container(id)
+    # Read port mappings from HostConfig
+    port_bindings = container_details.get("HostConfig").get("PortBindings")
+    def txform(x):
+        host_ip = x[0].get("HostIp") 
+        host_port = x[0].get("HostPort") 
+        if host_ip == "" and host_port == "":
+            return None
+        if host_ip == "":
+            return host_port
+        if host_port == "":
+            return (host_ip, )
+        return (host_ip, host_port)
+
+    port_mappings = {x: txform(port_bindings.get(x)) for x in port_bindings}
 
     try:
-        docker_client.start(id, \
-                            devices=['/dev/kvm:/dev/kvm:rwm', \
-                                     '/dev/net/tun:/dev/net/tun:rwm'], \
-                            cap_add=['NET_ADMIN'], \
-                            port_bindings = port_mappings, \
+        docker_client.start(id,
+                            devices=['/dev/kvm:/dev/kvm:rwm',
+                                     '/dev/net/tun:/dev/net/tun:rwm'],
+                            cap_add=['NET_ADMIN'],
+                            port_bindings = port_mappings,
                             volumes_from = get_my_id())
     except docker.errors.APIError as e: exit_script("Error", str(e), 1)
     exit_script("Started", "Instance " + id + " started", 0)
@@ -301,22 +308,16 @@ if form.getvalue("action") == "stop":
 
 
 
-entries = (os.path.join(prefix_dir, fn) for fn in os.listdir(prefix_dir))
-entries = ((os.stat(path)[stat.ST_CTIME], path) for path in entries)
-vm_list = [os.path.basename(path) for ctime, 
-		path in sorted(entries, reverse=True)]
-
 containers = {c.get("Id"): c for c in docker_client.containers(all=True)}
 
-container_list = []
-
-for vm in vm_list:
-    container = containers.get(vm)
-    if container == None:
-        import shutil
-        shutil.rmtree(prefix_dir + "/" + vm, ignore_errors=True)
-    else:
-        container_list.append(container)
+container_details_list = \
+         sorted(filter(lambda c: 
+                          filter(lambda e: e == u'RANCHER_VM=true', 
+                                     c.get("Config").get("Env")) != [], 
+                          map(docker_client.inspect_container, 
+                              [id for id in containers.keys()])),
+                key = lambda c: c.get("State").get("StartedAt"),
+                reverse = True)
 
 print_html_headers("RancherVM")
 
@@ -329,7 +330,7 @@ print """
 <input type="submit" value="Create Instance">
 </form>
 """
-if container_list == []:
+if container_details_list == []:
     print "No instances found."
 else:
     print """
@@ -360,14 +361,15 @@ else:
         return ip + str(mapping.get("PublicPort")) + ":" \
                   + str(mapping.get("PrivatePort")) + protocol
 
-    for container in container_list:
-        id = container.get("Id")
+    for container_details in container_details_list:
+        id = container_details.get("Id")
 
-        container_details = docker_client.inspect_container(id)
+        container = docker_client.inspect_container(id)
         hostname = container_details.get("Config").get("Hostname")
         ip = container_details.get("NetworkSettings").get("IPAddress")
         kvm_args = " ".join(container_details.get("Config").get("Cmd"))
 
+        container = containers.get(id)
         image = container.get("Image")
         status = container.get("Status")
         created = time.ctime(container.get("Created"))
@@ -377,7 +379,7 @@ else:
             start_stop_action = "<a href=\"ranchervm?action=stop&id=" \
                 + id + "\">Stop</a>"
             console_delete_action = "<a href=\"/vnc_auto.html?title=" \
-                + hostname + "&path=" + prefix_dir[1:] + "/"  \
+                + hostname + "&path=" + "vmmgmt/vm/"  \
                 + id + "/vnc\" target=\"_blank\">Console</a>"
 
         else:

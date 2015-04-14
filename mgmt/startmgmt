@@ -8,7 +8,15 @@ cd /var/lib/rancher
 
 NOVNC=/var/lib/rancher/noVNC-0.0.2
 
+# The gen_dnsmasq_conf script and websockify are completely independent
+# We should consider separating them into 2 containers. It is not the
+# right way to keep two distinct functions in the same container.
+
 /var/lib/rancher/gen_dnsmasq_conf > gen_dnsmasq_conf.log 2>&1 &
 
 # Start the websocket proxy and the web server with CGI support
+# The --unix-target option is just a dummy to satisfy websockify
+# command line parser. The actual Unix socket target is sent via
+# the path query variable.
+
 python $NOVNC/utils/websockify --web $NOVNC --cert /var/lib/rancher/self.pem 80 --unix-target /vmmgmt/vm

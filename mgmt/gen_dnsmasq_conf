@@ -78,7 +78,7 @@ while True:
         import json
         event = json.loads(events.next())
         if event.get("status") == "start":
-            print Received: event
+            print event
             gen_dnsmasq_conf()
     except Exception as e:
         time.sleep(5)

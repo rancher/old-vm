@@ -1,5 +1,5 @@
 FROM ubuntu:14.04
-RUN apt-get update && apt-get install -y inotify-tools dnsmasq python-minimal
+RUN apt-get update && apt-get install -y dnsmasq python-minimal
 ADD https://bootstrap.pypa.io/get-pip.py /usr/bin/
 RUN python /usr/bin/get-pip.py
 RUN pip install docker-py

@@ -1,7 +1,6 @@
 #!/usr/bin/python
 
-# This script is invoked by inotifywait when a new VM is about to be launched.
-# It reads network configuration saved by the startvm script and updates the
+# This script reads Docker container creation events and regenerates the
 # /etc/dnsmasq.conf file.
 
 import os
@@ -31,36 +30,33 @@ def gen_dnsmasq_conf():
     gateway = None
     ip_prefix_len = None
 
-    conf_file = open("/etc/dnsmasq.conf", "w")
+    with open("/etc/dnsmasq.conf", "w") as conf_file:
+        conf_file.write("user=root\n")
 
-    conf_file.write("user=root\n")
+        for container in containers:
+            hostname = container.get("Config").get("Hostname")
+            ip = container.get("NetworkSettings").get("IPAddress")
+            ip_prefix_len = container.get("NetworkSettings").get("IPPrefixLen")
+            gateway = container.get("NetworkSettings").get("Gateway")
+            mac = container.get("NetworkSettings").get("MacAddress")
 
-    for container in containers:
-        hostname = container.get("Config").get("Hostname")
-        ip = container.get("NetworkSettings").get("IPAddress")
-        ip_prefix_len = container.get("NetworkSettings").get("IPPrefixLen")
-        gateway = container.get("NetworkSettings").get("Gateway")
-        mac = container.get("NetworkSettings").get("MacAddress")
+            conf_file.write("dhcp-range=" + ip + "," + ip + "\n")
+            conf_file.write("dhcp-host=" + mac + "," + hostname + "," + ip + "\n") 
 
-        conf_file.write("dhcp-range=" + ip + "," + ip + "\n")
-        conf_file.write("dhcp-host=" + mac + "," + hostname + "," + ip + "\n") 
-
-    netmask = '.'.join([str((0xffffffff << (32 - ip_prefix_len) >> i) & 0xff)
+        netmask = '.'.join([str((0xffffffff << (32 - ip_prefix_len) >> i) & 0xff)
                         for i in [24, 16, 8, 0]])
 
-    dns_ips = []
-    for line in file('/etc/resolv.conf', 'r'):
-        columns = line.split()
-        if len(columns) > 0 and columns[0] == 'nameserver':
-            dns_ips.extend(columns[1:])
+        dns_ips = []
+        for line in file('/etc/resolv.conf', 'r'):
+            columns = line.split()
+            if len(columns) > 0 and columns[0] == 'nameserver':
+                dns_ips.extend(columns[1:])
 
-    nameservers = ",".join(dns_ips)
+        nameservers = ",".join(dns_ips)
 
-    conf_file.write("dhcp-option=option:router," + gateway + "\n")
-    conf_file.write("dhcp-option=option:netmask," + netmask + "\n")
-    conf_file.write("dhcp-option=option:dns-server," + nameservers + "\n")
-
-    conf_file.close()
+        conf_file.write("dhcp-option=option:router," + gateway + "\n")
+        conf_file.write("dhcp-option=option:netmask," + netmask + "\n")
+        conf_file.write("dhcp-option=option:dns-server," + nameservers + "\n")
 
     # We kill and restart dnsmasq. It's not sufficient to send HUP signal.
     # dnsmasq does not read the config file when it receives the HUP signal
@@ -75,10 +71,10 @@ def gen_dnsmasq_conf():
 events = docker_client.events()
 while True:
     try:
-        import json
         event = json.loads(events.next())
         if event.get("status") == "start":
             print event
+            sys.stdout.flush()
             gen_dnsmasq_conf()
     except Exception as e:
         time.sleep(5)

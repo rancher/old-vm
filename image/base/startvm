@@ -18,7 +18,7 @@ fi
 KVM_ARGS=$@
 
 # Create the qcow disk image on the Docker volume named /image, using
-# the compress qcow image in Docker container as the base.
+# the compressed qcow image in Docker container as the base.
 # Docker volumes typically have better performance than the file system for
 # Docker images
 
@@ -40,58 +40,18 @@ fi
 
 # Network setup:
 #
-# 1. Save network config away for the management container to config dnsmasq
-# 2. Create a bridge named br0
-# 3. Remove IP and MAC from eth0, give eth0 a random MAC
+# 1. Create a bridge named br0
+# 2. Remove IP from eth0, save eth0 MAC, give eth0 a random MAC
 
 IFACE=eth0
 BRIDGE_IFACE=br0
 
-cidr2mask() {
-  local i mask=""
-  local full_octets=$(($1/8))
-  local partial_octet=$(($1%8))
-
-  for ((i=0;i<4;i+=1)); do
-    if [ $i -lt $full_octets ]; then
-      mask+=255
-    elif [ $i -eq $full_octets ]; then
-      mask+=$((256 - 2**(8-$partial_octet)))
-    else
-      mask+=0
-    fi  
-    test $i -lt 3 && mask+=.
-  done
-
-  echo $mask
-}
-
-MAC=`ip addr show $IFACE | grep ether | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*\$//g' | cut -f2 -d ' '`
-IP=`ip addr show dev $IFACE | grep 'inet ' | awk '{print $2}' | cut -f1 -d/`
-CIDR=`ip addr show dev $IFACE | grep 'inet ' | awk '{print $2}' | cut -f2 -d/`
-NETMASK=`cidr2mask $CIDR`
-GATEWAY=`ip route get 8.8.8.8 | grep via | cut -f3 -d ' '`
-NAMESERVER=( `grep nameserver /etc/resolv.conf | cut -f2 -d ' '` )
-
-DOCKERID=`cat /proc/self/cgroup | grep cpu | cut -f 3 -d / | head -1`
-
-mkdir -p /vmmgmt/vm/$DOCKERID
-
-cat > /vmmgmt/vm/$DOCKERID/vm.conf << EOF
-{
-  "hostname": "$HOSTNAME",
-  "mac": "$MAC",
-  "ip": "$IP",
-  "netmask": "$NETMASK",
-  "gateway": "$GATEWAY",
-  "nameserver": "${NAMESERVER[*]}",
-  "KVM_ARGS": "$KVM_ARGS"
-}
-EOF
-
 NOTIFY_DNSMASQ=/vmmgmt/newvm.notify
 touch $NOTIFY_DNSMASQ
 
+MAC=`ip addr show $IFACE | grep ether | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*\$//g' | cut -f2 -d ' '`
+
+# Generate random new MAC address
 hexchars="0123456789ABCDEF"
 end=$( for i in {1..8} ; do echo -n ${hexchars:$(( $RANDOM % 16 )):1} ; done | sed -e 's/\(..\)/:\1/g' )
 NEWMAC=`echo 06:FE$end`
@@ -105,9 +65,12 @@ brctl addif $BRIDGE_IFACE $IFACE
 ip link set dev $IFACE up
 ip link set dev $BRIDGE_IFACE up
 
-# Exec kvm as PID 1, bridge kvm to br0
+# Exec kvm as PID 1
 
 echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf 
+
+DOCKERID=`cat /proc/self/cgroup | grep cpu | cut -f 3 -d / | head -1`
+mkdir -p /vmmgmt/vm/$DOCKERID
 
 exec kvm -vnc unix:/vmmgmt/vm/$DOCKERID/vnc \
 -monitor unix:/vmmgmt/vm/$DOCKERID/monitor,server,nowait \

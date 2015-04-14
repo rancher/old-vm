@@ -2,6 +2,7 @@
 
 import re
 import os
+import os.path
 import sys
 import json
 import logging
@@ -337,11 +338,12 @@ else:
 <table>
 <tr>
 <th>Action</th>
-<th>Name</th>
-<th>IP</th>
+<th>Hostname</th>
 <th>Image</th>
-<th>Status</th>
+<th>IP</th>
 <th>Ports</th>
+<th>Names</th>
+<th>Status</th>
 <th>Created</th>
 <th>KVM_ARGS</th>
 </tr>
@@ -373,14 +375,18 @@ else:
         image = container.get("Image")
         status = container.get("Status")
         created = time.ctime(container.get("Created"))
+        names = ",".join(container.get("Names"))
         ports = ",".join(map(format_mapping, container.get("Ports")))
 
         if status.startswith("Up"):
             start_stop_action = "<a href=\"ranchervm?action=stop&id=" \
                 + id + "\">Stop</a>"
-            console_delete_action = "<a href=\"/vnc_auto.html?title=" \
-                + hostname + "&path=" + "vmmgmt/vm/"  \
-                + id + "/vnc\" target=\"_blank\">Console</a>"
+            if os.path.exists("/vmmgmt/vm/" + id + "/vnc"):
+                console_delete_action = "<a href=\"/vnc_auto.html?title=" \
+                    + hostname + "&path=" + "vmmgmt/vm/"  \
+                    + id + "/vnc\" target=\"_blank\">Console</a>"
+            else:
+                console_delete_action = ""
 
         else:
             start_stop_action = "<a href=\"ranchervm?action=start&id=" \
@@ -392,10 +398,11 @@ else:
         print ("<td>" + start_stop_action + " " \
                       + console_delete_action + "</td>")
         print ("<td>" + hostname + "</td>")
-        print ("<td>" + str(ip) + "</td>")
         print ("<td>" + image + "</td>")
-        print ("<td>" + status + "</td>")
+        print ("<td>" + str(ip) + "</td>")
         print ("<td>" + ports + "</td>")
+        print ("<td>" + names + "</td>")
+        print ("<td>" + status + "</td>")
         print ("<td>" + created + "</td>")
         print ("<td>" + kvm_args + "</td>")
         print '</tr>'

@@ -66,9 +66,8 @@ ip link set dev $BRIDGE_IFACE up
 
 echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf 
 
-DOCKERID=`cat /proc/self/cgroup | grep cpu | cut -f 3 -d / | head -1`
-
 if [ -d /vmmgmt ]; then
+    DOCKERID=`cat /proc/self/cgroup | grep cpu | cut -f 3 -d / | head -1`
     mkdir -p /vmmgmt/vm/$DOCKERID
     VNC="-vnc unix:/vmmgmt/vm/$DOCKERID/vnc"
 fi

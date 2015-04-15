@@ -441,9 +441,9 @@ else:
         if status.startswith("Up"):
             start_stop_action = "<a href=\"ranchervm?action=stop&id=" \
                 + id + "\">Stop</a>"
-            if os.path.exists("/vmmgmt/vm/" + id + "/vnc"):
+            if os.path.exists("/ranchervm/vm/" + id + "/vnc"):
                 console_delete_action = "<a href=\"/vnc_auto.html?title=" \
-                    + hostname + "&path=" + "vmmgmt/vm/"  \
+                    + hostname + "&path=" + "ranchervm/vm/"  \
                     + id + "/vnc\" target=\"_blank\">Console</a>"
             else:
                 console_delete_action = ""

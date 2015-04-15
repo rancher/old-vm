@@ -18,5 +18,5 @@ COPY index.html $RANCHER_HOME/$VNC/
 COPY ranchervm $RANCHER_HOME/$VNC/cgi-bin/
 
 ENTRYPOINT ["/bin/busybox", "init"]
-VOLUME /vmmgmt
+VOLUME /ranchervm
 CMD []

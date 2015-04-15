@@ -76,13 +76,14 @@ fi
 
 echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf 
 
-# If /vmmgmt does not exist, we still proceed with running KVM. We just
+# If /ranchervm does not exist, we still proceed with running KVM. We just
 # won't get a VNC console socket.
 
-if [ -d /vmmgmt ]; then
+if [ -d /ranchervm ]; then
     DOCKERID=`cat /proc/self/cgroup | grep cpu | cut -f 3 -d / | head -1`
-    mkdir -p /vmmgmt/vm/$DOCKERID
-    VNC="-vnc unix:/vmmgmt/vm/$DOCKERID/vnc"
+    mkdir -p /ranchervm/vm/$DOCKERID
+    VNC="-vnc unix:/ranchervm/vm/$DOCKERID/vnc"
+    echo VNC server will listen on Unix socket /ranchervm/vm/$DOCKERID/vnc
 fi
 
 exec kvm $VNC `eval echo $KVM_BLK_OPTS` `eval echo $KVM_NET_OPTS` $KVM_ARGS

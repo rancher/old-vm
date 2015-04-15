@@ -251,7 +251,7 @@ if form.getvalue("action") == "create":
            re.compile("[^a-zA-Z\d\-]").search(hostname):
            exit_script("Input validation failed",
                        "Hostname must be an alpha numerical" \
-                       " string up to 16 characters long ("-" allowed).", 1) 
+                       " string up to 16 characters long ('-' allowed).", 1) 
 
     def check_image(image):
         if re.compile("[^a-zA-Z\d\-\.\/:]").search(image):

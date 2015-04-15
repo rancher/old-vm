@@ -1,6 +1,6 @@
 NAME = rancher/rancheros
-VERSION = 0.2.1
-BASE_IMAGE=rancheros-0.2.1-gz.img
+VERSION = 0.3.0
+BASE_IMAGE=rancheros-0.3.0-gz.img
 
 .PHONY : all clean build
 

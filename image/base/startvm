@@ -35,7 +35,12 @@ fi
 
 KVM_IMAGE=/image/sda.qcow2
 if [ ! -f "$KVM_IMAGE" ]; then
-  qemu-img create -f qcow2 -b /base_image/${BASE_IMAGE_DIR_LIST[0]} $KVM_IMAGE
+  qemu-img create -f qcow2 -b /base_image/${BASE_IMAGE_DIR_LIST[0]} \
+  $KVM_IMAGE > /dev/null
+  if [[ $? -ne 0 ]]; then
+    echo "Failed to create qcow2 image"
+    exit 3
+  fi
 fi
 
 # Network setup:
@@ -62,6 +67,11 @@ brctl addif $BRIDGE_IFACE $IFACE
 ip link set dev $IFACE up
 ip link set dev $BRIDGE_IFACE up
 
+if [[ $? -ne 0 ]]; then
+    echo "Failed to bring up network bridge"
+    exit 4
+fi
+
 # Exec kvm as PID 1
 
 echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf 
@@ -75,7 +85,4 @@ if [ -d /vmmgmt ]; then
     VNC="-vnc unix:/vmmgmt/vm/$DOCKERID/vnc"
 fi
 
-exec kvm $VNC \
-`eval echo $KVM_BLK_OPTS` \
-`eval echo $KVM_NET_OPTS` \
-$KVM_ARGS $KVM_EXTRA_ARGS
+exec kvm $VNC `eval echo $KVM_BLK_OPTS` `eval echo $KVM_NET_OPTS` $KVM_ARGS

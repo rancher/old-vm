@@ -1,0 +1,23 @@
+  
+  body {background-color:#f4f5f8; margin:0; padding:0; font-family:Gotham, "Helvetica Neue", Helvetica, Arial, sans-serif}
+  .header {background:#393d47; height:57px;}	
+  .logo {background:url(/images/ranchervm_logo.png) no-repeat top left; float:left; width:160px; height:20px; margin-top:5px;}
+  .wrapper {padding:15px; margin:0 auto;}
+  h1 {font-size:24px; color:#44b4a2; font-weight:normal; margin:0; padding:0; font-weight:200; float:left;}
+  button {background:#37b7e1; text-align:center; font-size:12px; font-weight:normal; padding:7px 10px; margin:0; border:none; border-radius:3px; color:#FFF; border-bottom:2px solid #2da0c3;}
+  button.create {float:right;}
+  button.form-create {float:left;}
+  .table-wrapper {width:100%; background:#FFF; min-height:300px; border-radius:5px; margin:15px 0 0 0; float:left; padding-bottom:25px; }
+  a {text: #37b7e1; }
+  .form {width:100%; height:auto; float:left;}
+  ul {list-style:none; width:100%;  margin:0 0 0 0; padding:0; flat:left;}
+  li {list-style:none; width:100%;  margin:15px 0 10px 0; padding:0; float:left;}
+  li .label {width:150px; height:auto; float:left; color:#393d47; font-size:13px; text-align:left; margin:5px 0 0 0; padding:0;}
+  li .text {width:350px; height:25px; float:left; background: #FFF; border:1px solid #e2e5e5; border-radius:3px; float:left; color:#393d47; font-size:13px; text-align:left; margin:0; padding-left:5px;}
+  .input_help {float:left; color:#393d47; font-size:13px; text-align:left; margin:0; padding-left:10px; padding-top:6px; font-style:italic;}
+  .input_help_bold {font-style:normal; font-weight:bold;background-color:#f4f5f8;padding:5px 5px 5px 0px;display:inline-block;}
+  .conf_msg {width:350px; height:auto; float:left; color:#393d47; font-size:13px; text-align:left; margin:5px 0 0 0; padding:0;}
+  .conf_msg_err {width:350px; height:auto; float:left; color:#BD2B2B; font-size:13px; text-align:left; margin:5px 0 0 0; padding:0;}
+  table {border-collapse: collapse;}
+  tr {color:#393d47; font-size:13px; text-align:left; vertical-align:middle; border-bottom: solid 1px #e2e5e5;}
+  th, td {padding: 10px}

@@ -6,25 +6,20 @@ NOVNC_VERSION = 0.0.2
 
 all: build
 
-build: v$(NOVNC_VERSION).tar.gz
-	rm -rf noVNC-$(NOVNC_VERSION)
-	tar xvf v$(NOVNC_VERSION).tar.gz
-	mkdir noVNC-$(NOVNC_VERSION)/cgi-bin
-	ln -s /var/lib/rancher/ranchervm noVNC-$(NOVNC_VERSION)/cgi-bin
-	cp index.html noVNC-$(NOVNC_VERSION)/
+build: noVNC-$(NOVNC_VERSION).tar.gz
 	docker build -t $(NAME):$(VERSION) .
 
-v$(NOVNC_VERSION).tar.gz:
-	wget https://github.com/rancherio/noVNC/archive/v$(NOVNC_VERSION).tar.gz
+noVNC-$(NOVNC_VERSION).tar.gz:
+	wget -O noVNC-$(NOVNC_VERSION).tar.gz https://github.com/rancherio/noVNC/archive/v$(NOVNC_VERSION).tar.gz
 
 clean:
-	rm -rf v$(NOVNC_VERSION).tar.gz noVNC-$(NOVNC_VERSION)
+	rm -f noVNC-$(NOVNC_VERSION).tar.gz
 
 tag_latest:
 	docker tag -f $(NAME):$(VERSION) $(NAME):latest
 
 run:
-	docker run --cap-add NET_ADMIN -it \
+	docker run --cap-add NET_ADMIN \
 	-v /var/run/docker.sock:/var/run/docker.sock \
 	-p 8080:80 \
 	$(NAME):$(VERSION)

@@ -18,10 +18,14 @@ form = cgi.FieldStorage()
 def print_html_headers(title):
     print """Content-type:text/html
 
+<!doctype html>
 <html>
 <head>
+<meta charset="UTF-8">
 <title>{title}</title>
+<link rel="stylesheet" type="text/css" href="/css/rancherVM.css">
 </head>
+
 <body>
 """.format(**vars())
 
@@ -32,12 +36,27 @@ def print_html_footers():
 
 def exit_script(title, msg, code):
     print_html_headers(title)
-    print msg
+    if code:
+        html_msg = "<div class=\"conf_msg_err\">{msg}</div>".format(**vars())
+    else:
+        html_msg = "<div class=\"conf_msg\">{msg}</div>".format(**vars())
     print """
-<form method="link" action="ranchervm">
-<input type="submit" value="Ok">
-</form>
-"""
+        <div class="header"><div class="wrapper"><a href="ranchervm"><div class="logo"></div></a></div></div>
+        <div class="wrapper">
+          <h1>{title}</h1>
+          <button class="create" onclick="location.href='ranchervm'">View Instances</button>
+          <div class="table-wrapper">
+                <div class="wrapper">
+                        <ul>
+                                <li>
+                                {html_msg}
+                                </li>
+                                <li><button class="form-create" onclick="location.href='ranchervm'">OK</button></li>
+                       </ul>
+                </div>
+          </div>
+        </div>
+""".format(**vars())
     print_html_footers()
     sys.exit(code)
 
@@ -49,22 +68,44 @@ if form.getvalue("action") == "create_form":
     print_html_headers("RancherVM")
 
     print """
-<form method="POST" action="ranchervm">
-<input type="hidden" name="action" value="create">
-<table>
-<tr> <td>Hostname:</td> 
-     <td><input type="text" name="hostname" value="{random_string}"></td></tr>
-<tr> <td>Image:</td> 
-     <td><input type="text" name="image" value="rancher/rancheros:0.2.1"></td></tr>
-<tr> <td>Memory Size:</td> 
-     <td><input type="text" name="mem" value="512m"></td></tr>
-<tr> <td># of vCPUs:</td> 
-     <td><input type="text" name="cpu" value="1"></td></tr>
-<tr> <td>Port mappings:</td> 
-     <td><input type="text" name="ports" value="80"> A comma-separated list of port mappings specified in <tt>docker run -p</tt> command line syntax. Range not supported</td></tr>
-</table>
-<input type="submit" value="Create">
-</form>
+        <div class="header"><div class="wrapper"><a href="ranchervm"><div class="logo"></div></a></div></div>
+        <div class="wrapper">
+        <h1>Create Instances</h1>
+         <button class="create" onclick="location.href='ranchervm'">View Instances</button>
+        <div class="table-wrapper">
+                <div class="wrapper">
+                        <form method "POST" class="form" action="ranchervm">
+                        <input type="hidden" name="action" value="create">
+                        <ul>
+                                <li>
+                                        <label  class="label "type="label" for="hostname">Hostname</label>
+                                        <input type="text" class="text" name="hostname" value="{random_string}">
+                                        <div class="input_help">We will attempt to set the VM hostname using DHCP, but not all operating systems will honor it</div>
+                                </li>
+                                <li>
+                                        <label  class="label "type="label" for="hostname">Image</label>
+                                        <input type="text" class="text" name="image" value="rancher/rancheros:0.2.1">
+					<div class="input_help">The name of a Docker image built from rancher/osbase</div>
+                                </li>
+                                <li>
+                                        <label  class="label "type="label" for="hostname">Memory Size</label>
+                                        <input type="text" class="text" name="mem" value="512m">
+					<div class="input_help">KVM allows you to provision more memory than the host has, as long as the memory is not in use</div>
+                                </li>
+                                <li>
+                                        <label  class="label "type="label" for="hostname"># of vCPUs</label>
+                                        <input type="text" class="text" name="cpu" value="1">
+					<div class="input_help">KVM lets you specify a # of vCPUs larger than # of cores on the host</div>
+                                </li>
+                                <li>
+                                        <label  class="label "type="label" for="hostname">Port mapping</label>
+                                        <input type="text" class="text" name="ports" value="80"> <div class="input_help">A comma-separated list of port mappings specified in <span class="input_help_bold">docker run -p</span> command line syntax</div>
+                                </li>
+                                <li><button class="form-create">Create</button></li>
+                        </ul>
+                        </form>
+                </div>
+        </div>
 """.format(**vars())
     sys.exit()
 
@@ -209,20 +250,21 @@ if form.getvalue("action") == "create":
     def check_hostname(hostname):
         if len(hostname) > 16 or \
            re.compile("[^a-zA-Z\d\-]").search(hostname):
-           exit_script("Error", "Hostname must be an alpha numerical" \
-                       " string up to 16 characters long.", 1) 
+           exit_script("Input validation failed",
+                       "Hostname must be an alpha numerical" \
+                           " string up to 16 characters long.", 1) 
 
     def check_image(image):
         if re.compile("[^a-zA-Z\d\-\.\/:]").search(image):
-           exit_script("Error", "Bad image name", 1)
+           exit_script("Input validation failed", "Bad image name", 1)
 
     def check_mem(mem):
         if not re.compile("^[\d]+[mMgG]$").match(mem):
-           exit_script("Error", "Bad memory size", 1)
+           exit_script("Input validation failed", "Bad memory size", 1)
 
     def check_cpu(cpu):
         if not re.compile("^[\d]+$").match(cpu):
-           exit_script("Error", "Bad vCPU count", 1)
+           exit_script("Input validation failed", "Bad vCPU count", 1)
 
     check_hostname(hostname)
     check_image(image)
@@ -230,7 +272,8 @@ if form.getvalue("action") == "create":
     check_cpu(cpu)
     try:
         port_mappings = parse_port_mappings(ports)
-    except Exception as e: exit_script("Error", str(e), 1)
+    except Exception as e:
+        exit_script("Bad port mapping string", str(e), 1)
 
     def extract(x):
         arr = x.split('/')
@@ -251,9 +294,7 @@ if form.getvalue("action") == "create":
             command = kvm_args,
             hostname = hostname,
             detach = True,
-            stdin_open = True,
-            ports = container_ports,
-            tty = True)
+            ports = container_ports)
 
         docker_client.start(container,
                             devices=['/dev/kvm:/dev/kvm:rwm',
@@ -261,14 +302,16 @@ if form.getvalue("action") == "create":
                             cap_add=['NET_ADMIN'],
                             port_bindings = port_mappings,
                             volumes_from = get_my_id())
-    except docker.errors.APIError as e: exit_script("Error", str(e), 1)
+    except docker.errors.APIError as e:
+        exit_script("Failed to create and start", str(e), 1)
     exit_script("Created", "Instance " + hostname + " created", 0)
 
 if form.getvalue("action") == "delete":
     id = form.getvalue("id")
     try:
         docker_client.remove_container(id);
-    except docker.errors.APIError as e: exit_script("Error", str(e), 1)
+    except docker.errors.APIError as e:
+        exit_script("Failed to delete", str(e), 1)
     exit_script("Deleted", "Instance " + id + " removed", 0)
 
 if form.getvalue("action") == "start":
@@ -296,14 +339,16 @@ if form.getvalue("action") == "start":
                             cap_add=['NET_ADMIN'],
                             port_bindings = port_mappings,
                             volumes_from = get_my_id())
-    except docker.errors.APIError as e: exit_script("Error", str(e), 1)
+    except docker.errors.APIError as e:
+        exit_script("Failed to start", str(e), 1)
     exit_script("Started", "Instance " + id + " started", 0)
 
 if form.getvalue("action") == "stop":
     id = form.getvalue("id")
     try:
         docker_client.stop(id, 15)
-    except docker.errors.APIError as e: exit_script("Error", str(e), 1)
+    except docker.errors.APIError as e:
+        exit_script("Failed to stop", str(e), 1)
     exit_script("Stopped", "Instance " + id + " stopped", 0)
 
 
@@ -321,31 +366,30 @@ container_details_list = \
 
 print_html_headers("RancherVM")
 
-print """
-
-<h1>RancherVM</h1>
-
-<form method="link" action="ranchervm">
-<input type="hidden" name="action" value="create_form">
-<input type="submit" value="Create Instance">
-</form>
-"""
 if container_details_list == []:
     print "No instances found."
 else:
     print """
-<table>
-<tr>
-<th>Action</th>
-<th>Hostname</th>
-<th>Image</th>
-<th>IP</th>
-<th>Ports</th>
-<th>Names</th>
-<th>Status</th>
-<th>Created</th>
-<th>KVM_ARGS</th>
-</tr>
+        <div class="header">
+                <div class="wrapper"><a href="ranchervm"><div class="logo"></div></a></div>
+        </div>
+        <div class="wrapper">
+                <h1>Instances</h1>
+                <button class="create" onclick="location.href='ranchervm?action=create_form'">Create Instance</button>
+                <div class="table-wrapper">
+                        <div class="wrapper">
+                                <table width="100%">
+                                        <tr>
+                                                <th width="10%">HOSTNAME</th>
+                                                <th width="10%">IMAGE</th>
+                                                <th width="10%">IP</th>
+                                                <th width="10%">PORTS</th>
+                                                <th width="10%">NAMES</th>
+                                                <th width="10%">STATUS</th>
+                                                <th width="15%">CREATED</th>
+                                                <th width="15%">KVM ARGS</th>
+                                                <th width="10%">ACTIONS</th>
+                                        </tr>
 """
 
     def format_mapping(mapping):
@@ -374,7 +418,7 @@ else:
         image = container.get("Image")
         status = container.get("Status")
         created = time.ctime(container.get("Created"))
-        names = ",".join(container.get("Names"))
+        names = ",".join(map (lambda x: x[1:], container.get("Names")))
         ports = ",".join(map(format_mapping, container.get("Ports")))
 
         if status.startswith("Up"):
@@ -394,8 +438,6 @@ else:
                 + id + "\">Delete</a>"
 
         print '<tr>'
-        print ("<td>" + start_stop_action + " " \
-                      + console_delete_action + "</td>")
         print ("<td>" + hostname + "</td>")
         print ("<td>" + image + "</td>")
         print ("<td>" + str(ip) + "</td>")
@@ -404,9 +446,14 @@ else:
         print ("<td>" + status + "</td>")
         print ("<td>" + created + "</td>")
         print ("<td>" + kvm_args + "</td>")
+        print ("<td>" + start_stop_action + " " \
+                      + console_delete_action + "</td>")
         print '</tr>'
 
     print """</table>
+                        </div>
+                </div>
+        </div>
 """
 
 print_html_footers()

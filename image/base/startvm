@@ -18,9 +18,9 @@ fi
 KVM_ARGS=$@
 
 # Create the qcow disk image on the Docker volume named /image, using
-# the compressed qcow image in Docker container as the base.
-# Docker volumes typically have better performance than the file system for
-# Docker images
+# the compressed qcow image that came with Docker image as the base.
+# Docker volumes typically perform better than the file system for
+# Docker images (no need for overlay fs etc.)
 
 BASE_IMAGE_DIR_LIST=( `ls /base_image` )
 if [ ${#BASE_IMAGE_DIR_LIST[@]} -ne 1 ]; then
@@ -65,6 +65,9 @@ ip link set dev $BRIDGE_IFACE up
 # Exec kvm as PID 1
 
 echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf 
+
+# If /vmmgmt does not exist, we still proceed with running KVM. We just
+# won't get a VNC console socket.
 
 if [ -d /vmmgmt ]; then
     DOCKERID=`cat /proc/self/cgroup | grep cpu | cut -f 3 -d / | head -1`

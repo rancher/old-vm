@@ -70,7 +70,7 @@ if form.getvalue("action") == "create_form":
     print """
         <div class="header"><div class="wrapper"><a href="ranchervm"><div class="logo"></div></a></div></div>
         <div class="wrapper">
-        <h1>Create Instances</h1>
+        <h1>Create Instance</h1>
          <button class="create" onclick="location.href='ranchervm'">View Instances</button>
         <div class="table-wrapper">
                 <div class="wrapper">
@@ -84,7 +84,7 @@ if form.getvalue("action") == "create_form":
                                 </li>
                                 <li>
                                         <label  class="label "type="label" for="hostname">Image</label>
-                                        <input type="text" class="text" name="image" value="rancher/rancheros:0.2.1">
+                                        <input type="text" class="text" name="image" value="rancher/rancheros:0.3.0">
 					<div class="input_help">The name of a Docker image built from rancher/osbase</div>
                                 </li>
                                 <li>
@@ -367,7 +367,25 @@ container_details_list = \
 print_html_headers("RancherVM")
 
 if container_details_list == []:
-    print "No instances found."
+    print """
+        <div class="header">
+                <div class="wrapper"><a href="ranchervm"><div class="logo"></div></a></div>
+        </div>
+        <div class="wrapper">
+                <h1>Instances</h1>
+                <button class="create" onclick="location.href='ranchervm?action=create_form'">Create Instance</button>
+
+          <div class="table-wrapper">
+                <div class="wrapper">
+                        <ul>
+                                <li>
+                                No instances found.
+                                </li>
+                       </ul>
+                </div>
+          </div>
+        </div>
+"""
 else:
     print """
         <div class="header">
@@ -418,8 +436,8 @@ else:
         image = container.get("Image")
         status = container.get("Status")
         created = time.ctime(container.get("Created"))
-        names = ",".join(map (lambda x: x[1:], container.get("Names")))
-        ports = ",".join(map(format_mapping, container.get("Ports")))
+        names = ", ".join(map(lambda x: x[1:], container.get("Names")))
+        ports = ", ".join(map(format_mapping, container.get("Ports")))
 
         if status.startswith("Up"):
             start_stop_action = "<a href=\"ranchervm?action=stop&id=" \

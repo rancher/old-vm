@@ -62,8 +62,7 @@ def exit_script(title, msg, code):
 
 
 if form.getvalue("action") == "create_form":
-    random_string = ''.join(random.choice(string.ascii_lowercase +
-              string.digits) for _ in range(6))
+    auto_name = "i-" + "%08x" % random.randint(0, 0xffffffff)
 
     print_html_headers("RancherVM")
 
@@ -79,7 +78,7 @@ if form.getvalue("action") == "create_form":
                         <ul>
                                 <li>
                                         <label  class="label "type="label" for="hostname">Hostname</label>
-                                        <input type="text" class="text" name="hostname" value="{random_string}">
+                                        <input type="text" class="text" name="hostname" value="{auto_name}">
                                         <div class="input_help">We will attempt to set the VM hostname using DHCP, but not all operating systems will honor it</div>
                                 </li>
                                 <li>
@@ -252,7 +251,7 @@ if form.getvalue("action") == "create":
            re.compile("[^a-zA-Z\d\-]").search(hostname):
            exit_script("Input validation failed",
                        "Hostname must be an alpha numerical" \
-                           " string up to 16 characters long.", 1) 
+                       " string up to 16 characters long ("-" allowed).", 1) 
 
     def check_image(image):
         if re.compile("[^a-zA-Z\d\-\.\/:]").search(image):

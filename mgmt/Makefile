@@ -1,4 +1,4 @@
-NAME = rancher/vmmgmt
+NAME = rancher/ranchervm
 VERSION = 0.0.1
 NOVNC_VERSION = 0.0.2
 
@@ -21,5 +21,5 @@ tag_latest:
 run:
 	docker run --cap-add NET_ADMIN \
 	-v /var/run/docker.sock:/var/run/docker.sock \
-	-p 8080:80 -v /vmmgmt:/vmmgmt \
+	-p 8080:80 -v /ranchervm:/ranchervm \
 	$(NAME):$(VERSION)

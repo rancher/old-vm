@@ -19,7 +19,6 @@ tag_latest:
 	docker tag -f $(NAME):$(VERSION) $(NAME):latest
 
 run:
-	docker run --cap-add NET_ADMIN \
-	-v /var/run/docker.sock:/var/run/docker.sock \
-	-p 8080:80 -v /ranchervm:/ranchervm \
+	docker run -v /var/run/docker.sock:/var/run/docker.sock \
+	-p 8080:80 -v /tmp/ranchervm:/ranchervm \
 	$(NAME):$(VERSION)

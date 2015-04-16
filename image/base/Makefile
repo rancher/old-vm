@@ -14,5 +14,5 @@ tag_latest:
 clean:
 
 test:
-	docker run -e "RANCHER_VM=true" --cap-add NET_ADMIN -it -v /ranchervm:/ranchervm --device /dev/kvm:/dev/kvm --device /dev/net/tun:/dev/net/tun \
+	docker run -e "RANCHER_VM=true" --cap-add NET_ADMIN -it -v /tmp/ranchervm:/ranchervm --device /dev/kvm:/dev/kvm --device /dev/net/tun:/dev/net/tun \
 	$(NAME):$(VERSION)

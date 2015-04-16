@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -x
+
+# For debugging
+if [ "$1" = "bash" ]; then
+  exec bash
+fi
+
+RANCHER_HOME=/var/lib/rancher
+
+exec python $RANCHER_HOME/noVNC-0.0.2/utils/websockify --web $RANCHER_HOME/noVNC-0.0.2 --cert $RANCHER_HOME/self.pem 80 --unix-target /ranchervm/vm

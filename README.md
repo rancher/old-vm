@@ -34,6 +34,12 @@ using Docker command line as follows:
 When you run a VM container from the command line, the system prints a
 path to a Unix socket for VNC console access.
 
+All the core capabilities of RancherVM reside in the VM container.
+The RancherVM management container (`rancher/ranchervm`) provides a 
+simple web interface built on
+the standard Docker API and is not an essential component of the
+system.
+
 ## Build VM Images
 
 You can find instructions on how to build images, including Windows 

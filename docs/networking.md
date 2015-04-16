@@ -1,7 +1,7 @@
 # RancherVM Networking
 
 RancherVM enables VM containers to be managed exactly like regular Docker
-containers. The user performs exactly the same set of actions whether he
+containers. The user performs the same set of actions whether he
 manages a regaulr Ubuntu container or a VM container running an
 Unbuntu VM inside.
 
@@ -22,16 +22,18 @@ networking for the VM container.
 1. The script removes the original IP address from container's NIC and generates a new
    non-conflicting IP address and MAC address for the bridge.
 1. The script creates a `dnsmasq.conf` file and starts a `dnsmasq` process to serve as the
-   dedicated DHCP server for one virtual machine. This DHCP server will only respond to 
-   the original MAC and IP address of the container.
-1. The script then runs `exec` of the KVM process. From now on QEMU/KVM runs as PID 1 in the VM container.
+   dedicated DHCP server for the one virtual machine running inside the container. This 
+   DHCP server will only respond to the original MAC and IP address of the container.
+1. The script then runs `exec` of the KVM process. KVM is bridged to the newly created
+   Linux bridge `br0`. From now on QEMU/KVM runs as PID 1 in the VM container.
 
 This approach transparently moves networking configuration from the container to
-the virtual machine. Even though the `dnsmasq` DHCP server plays a central role here, it can
-be disabled in deployments where other systems will provide DHCP and IPAM services to
-virtual machines. For example, when we deploy RancherVM in Rancher, we disable the dnsmasq function
-in VM containers. Rancher manages its own DHCP service, creates virtual networking, and allocates
-IP addresses at a global scale.
+the virtual machine. 
 
 The DHCP service offered by `dnsmasq` can be disabled by setting the `NO_DHCP` environment variable
 to `true` before starting the VM container.
+The `dnsmasq` DHCP server should be disabled where another system will provide DHCP and IPAM services to
+virtual machines. For example, when we deploy RancherVM in Rancher, we disable the dnsmasq function
+in VM containers. Rancher manages its own DHCP service, creates virtual networking, and allocates
+IP addresses from its own database. Other deployments may use alternative means of configuring
+virtual machine networking. As an example, cloud-init also eliminates the need for DHCP.

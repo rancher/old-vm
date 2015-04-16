@@ -6,6 +6,24 @@ work, but compressed `qcow2` images are preferred due to its small size.
 
 ## Build VM Images
 
+There are many tools you can use to build VM images. One tool we particularly
+like `virt-manager`. It allows you to configure virtio devices
+and install operating systems from bootable ISO files. 
+
+On Ubuntu (and perhaps on other Linux distribution) `virt-manager` places the
+resulting `qcow2` image in a directory called `/var/lib/libvirt/images/`. You
+need to be root to read the `qcow2` images in that directory.
+
+## Compress VM Images
+
+After you have installed the operating system in a `qcow2` file and created
+a file like `myos.img`, run the `qemu-img convert` command to compress the image.
+For example:
+
+  qemu-img convert -O qcow2 -c myos.img myos.gz.img
+
+## Build VM Container Images
+
 You can follow the example of one
 of the VM images included with RancherVM to build your own VM image.
 The following, for example, is the Dockerfile for building RancherOS
@@ -40,21 +58,14 @@ choice.
 Note that RancherVM scripts will substitute in the right value for `$KVM_IMAGE`,
 `$BRIDGE_IFACE`, and `$MAC`. Do not change these valriables.
 
-## `Virt-manager` Tool
-
-There are many tools you can use to build VM images. One tool we particularly
-like `virt-manager`. It allows you to configure virtio devices
-and install operating systems from bootable ISO files. You can also
-use `virt-manager` to figure out what command line options you need to use
+You can use `virt-manager` to figure out what command line options you need to use
 should you decide to customize `KVM_BLK_OPTS` and `KVM_NET_OPTS`. Just configure
 what you want in `virt-manager` and type `ps -ef | grep kvm` to see what command
 line options `virt-manager` has generated.
 
-## How to Build Windows Image
+## Build Windows VM Images
 
 Linux distribution generally support virtio out of the box. You need to take
-special steps to install virtio drivers for Windows. The following video explains
+special steps to install virtio drivers for Windows. This [video](https://youtu.be/VAWKHrfDWrM) explains
 how to build a Windows image for RancherVM.
-
-<iframe width="560" height="315" src="https://www.youtube.com/embed/VAWKHrfDWrM" frameborder="0" allowfullscreen></iframe>
 

@@ -67,6 +67,7 @@ images, in the [RancherVM Images](docs/images.md) document.
 The details of how RancherVM configures network for the VM container
 is documented in [RancherVM Networking](docs/networking.md).
 
-## Build
+## Build from Source
+
 Just type `make`
 

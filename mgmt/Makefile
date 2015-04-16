@@ -4,7 +4,7 @@ NOVNC_VERSION = 0.0.2
 
 .PHONY : all clean build
 
-all: build
+all: build tag_latest
 
 build: noVNC-$(NOVNC_VERSION).tar.gz
 	docker build -t $(NAME):$(VERSION) .

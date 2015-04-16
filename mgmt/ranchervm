@@ -83,7 +83,7 @@ if form.getvalue("action") == "create_form":
                                 </li>
                                 <li>
                                         <label  class="label "type="label" for="hostname">Image</label>
-                                        <input type="text" class="text" name="image" value="rancher/rancheros:0.3.0">
+                                        <input type="text" class="text" name="image" value="rancher/vm-rancheros">
 					<div class="input_help">The name of a Docker image built from rancher/osbase</div>
                                 </li>
                                 <li>

@@ -58,8 +58,13 @@ choice.
     KVM_NET_OPTS="-netdev bridge,br=\$BRIDGE_IFACE,id=net0 -device virtio-net-pci,netdev=net0,mac=\$MAC"
 
 Note that RancherVM scripts will substitute in the right value for `$KVM_IMAGE`,
-`$BRIDGE_IFACE`, and `$MAC`. Do not mess with these valriables. Do not remove
-the `\` before `$` character. Place these variables exactly
+`$BRIDGE_IFACE`, and `$MAC`. 
+
+1. Place `$KVM_IMAGE` in the block device option where the `qcow2` image file is specified.
+1. Make sure KVM networking is configured as bridge mode and the virtual NIC is bridged to `$BRIDGE_IFACE`.
+1. Make sure the MAC address of the virtual NIC is set to `$MAC`.
+
+Do not mess with these valriables. Do not remove the `\` before `$` character. Place these variables exactly
 where they should be. If you do not know where they should go, you have probably
 messed up the command line options.
 

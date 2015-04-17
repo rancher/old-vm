@@ -81,7 +81,7 @@ NAMESERVERS=`echo ${NAMESERVER[*]} | sed "s/ /,/"`
 cat > /etc/dnsmasq.conf << EOF
 user=root
 dhcp-range=$IP,$IP
-dhcp-host=$MAC,$HOSTNAME,$IP
+dhcp-host=$MAC,$HOSTNAME,$IP,infinite
 dhcp-option=option:router,$GATEWAY
 dhcp-option=option:netmask,$NETMASK
 dhcp-option=option:dns-server,$NAMESERVERS

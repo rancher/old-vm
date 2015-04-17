@@ -1,7 +1,7 @@
 # RancherVM Images
 
 RancherVM images are standard KVM images bundled in Docker images. We recommend
-you use compressed `qcow2` images. Any format that can serve as a QEMU base image can also
+you use compressed `qcow2` images. Any format that can serve as a QEMU base image will also
 work, but compressed `qcow2` images are preferred due to its small size.
 
 ## Build VM Images
@@ -58,8 +58,10 @@ choice.
     KVM_NET_OPTS="-netdev bridge,br=\$BRIDGE_IFACE,id=net0 -device virtio-net-pci,netdev=net0,mac=\$MAC"
 
 Note that RancherVM scripts will substitute in the right value for `$KVM_IMAGE`,
-`$BRIDGE_IFACE`, and `$MAC`. Do not mess with these valriables. Use them exactly
-where they should be.
+`$BRIDGE_IFACE`, and `$MAC`. Do not mess with these valriables. Do not remove
+the `\` before `$` character. Place these variables exactly
+where they should be. If you do not know where they should go, you have probably
+messed up the command line options.
 
 You can use `virt-manager` to figure out what command line options you need to use
 should you decide to customize `KVM_BLK_OPTS` and `KVM_NET_OPTS`. Just configure

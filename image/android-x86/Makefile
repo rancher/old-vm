@@ -1,5 +1,6 @@
 NAME = rancher/vm-android
 VERSION = 4.4
+BASE_IMAGE=android-4.4-r2.gz.qcow2
 
 all: build tag_latest
 

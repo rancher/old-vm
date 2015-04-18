@@ -3,8 +3,14 @@ VERSION = 4.4
 
 all: build tag_latest
 
-build:
+build: $(BASE_IMAGE)
 	docker build -t $(NAME):$(VERSION) .
+
+$(BASE_IMAGE):
+	wget https://s3-us-west-1.amazonaws.com/sheng/qcow2/$(BASE_IMAGE)
+
+clean:
+	rm -f $(BASE_IMAGE)
 
 tag_latest:
 	docker tag -f $(NAME):$(VERSION) $(NAME):latest

@@ -5,15 +5,16 @@ Package and run KVM images as Docker containers
 
 ## How It Works
 
-RancherVM allows you to create a special kind of containers called **VM Containers**.
-A VM container looks and feels like a regular container. It can be created from Dockerfile,
+RancherVM allows you to create a special kind of containers called 
+**VM Containers**.  A VM container looks and feels like a regular 
+container. It can be created from Dockerfile,
 distributed using DockerHub, managed using `docker` command line,
 and networked together using links and port bindings. 
 Inside each VM container, however, is a virtual machine instance. You can
 package any QEMU/KVM image as RancherVM containers.
 
 RancherVM additionally comes with a management container that provides a web
-UI for managing virtual machines and accessing VNC console.
+UI for managing virtual machines and accessing the VNC console.
 
 ![How it works](docs/ranchervm.png "How it works")
 

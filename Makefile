@@ -1,4 +1,4 @@
-SUBDIRS := $(wildcard */.)
+SUBDIRS := image mgmt
 
 .PHONY : all $(SUBDIRS)
 

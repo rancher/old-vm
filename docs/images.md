@@ -79,3 +79,9 @@ Linux distributions generally support virtio out of the box. You need to take
 special steps to install virtio drivers for Windows. This [video](https://youtu.be/VAWKHrfDWrM) explains
 how to build a Windows image for RancherVM.
 
+## Build Images using Emulated Drivers
+
+Some operating systems do not support virtio drivers. In the `image/android-x86`
+directory, you can find the instructions to build a KVM image using the vanilla
+emulated drivers. Emulated drivers are less efficient, but they work with many
+more operating systems.

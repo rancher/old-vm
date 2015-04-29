@@ -354,14 +354,11 @@ if form.getvalue("action") == "stop":
 
 containers = {c.get("Id"): c for c in docker_client.containers(all=True)}
 
-container_details_list = \
-         sorted(filter(lambda c: 
-                          filter(lambda e: e == u'RANCHER_VM=true', 
-                                     c.get("Config").get("Env")) != [], 
-                          map(docker_client.inspect_container, 
-                              [id for id in containers.keys()])),
-                key = lambda c: c.get("State").get("StartedAt"),
-                reverse = True)
+container_details_list = sorted(filter(lambda e: u'RANCHER_VM=true' in e.get("Config").get("Env"),
+                                       filter(lambda c: c.get("Config").get("Env") is not None,
+                                              map(docker_client.inspect_container,[id for id in containers.keys()]))),
+                                key=lambda c: c.get("State").get("StartedAt"),
+                                reverse=True) 
 
 print_html_headers("RancherVM")
 

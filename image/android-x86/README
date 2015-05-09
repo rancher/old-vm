@@ -23,9 +23,13 @@ and install Android onto the partition.
 
 $ qemu-img convert -O qcow2 -c android.qcow2 android.gz.qcow2
 
-6. Encure you have android.gz.qcow2 in this directory.  
+6. Copy the resulting android.gz.qcow2 file into the current directory and
+rename it android-4.4-r2.gz.qcow2.
 
-7. Run make to build the Docker image for Android-x86
+7. Run "make" to build the Docker image for Android-x86. Note that the Makefile
+will automatically download a pre-built version of android-4.4-r2.gz.qcow2
+if we had not created that file ourself and placed it in the current
+directory.
 
 The Android x86 VM works. But I have observed 2 problems:
 

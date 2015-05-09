@@ -54,7 +54,7 @@ path to a Unix socket for VNC console access.
 
 Rancher creates 2 IP addresses in the container and that confuses the
 RancherVM startup script.
-You need to set the environment variable "IP_PREFIX=10.42" to get
+You need to set the environment variable `IP_PREFIX=10.42` to get
 RancherVM to work under Rancher.
 
 All the core capabilities of RancherVM reside in the VM container.

@@ -1,4 +1,4 @@
-FROM ubuntu:14.04
+FROM ubuntu:14.04.2
 RUN apt-get update && apt-get install -y python-minimal busybox
 ADD https://bootstrap.pypa.io/get-pip.py /usr/bin/
 RUN python /usr/bin/get-pip.py

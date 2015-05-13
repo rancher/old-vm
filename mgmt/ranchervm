@@ -12,6 +12,7 @@ import time
 import random
 import string
 import cgi
+import subprocess
 
 form = cgi.FieldStorage()
 
@@ -235,9 +236,8 @@ def parse_port_mappings(src_list_str):
                 map(parse_port_map, src_list_str.split(","))}
 
 def get_my_id():
-    with open ("/proc/self/cgroup", "r") as cgroup_file:
-        return re.findall(":cpu:/docker/\S+", 
-                          cgroup_file.read())[0][13:]
+    cmd = 'grep "/docker" /proc/self/cgroup | cut -f 3 -d / | cut -f 2 -d - | cut -f 1 -d . | head -1'
+    return subprocess.check_output(["bash", "-c", cmd]).rstrip()
 
 if form.getvalue("action") == "create":
     hostname = form.getvalue('hostname')

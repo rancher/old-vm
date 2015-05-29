@@ -433,7 +433,10 @@ else:
         status = container.get("Status")
         created = time.ctime(container.get("Created"))
         names = ", ".join(map(lambda x: x[1:], container.get("Names")))
-        ports = ", ".join(map(format_mapping, container.get("Ports")))
+        ports = container.get("Ports")
+        if ports == None:
+            ports = []
+        ports = ", ".join(map(format_mapping, ports))
 
         if status.startswith("Up"):
             start_stop_action = "<a href=\"ranchervm?action=stop&id=" \

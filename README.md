@@ -37,8 +37,7 @@ virtualization with VMware Workstation or VMware Fusion. Just enable
 
 Once you have Docker and KVM both setup, run:
 
-    docker run -v /var/run/docker.sock:/var/run/docker.sock \
-        -p 8080:80 -v /tmp/ranchervm:/ranchervm rancher/ranchervm
+    docker run -v /run:/run -p 8080:80 -v /tmp/ranchervm:/ranchervm rancher/ranchervm
 
 and point your browser to `https://<KVM hostname>:8080`
 

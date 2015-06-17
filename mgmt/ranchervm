@@ -453,6 +453,9 @@ else:
                 + id + "\">Start</a>"
             console_delete_action = "<a href=\"ranchervm?action=delete&id=" \
                 + id + "\">Delete</a>"
+            # Sometimes Docker API returns stale IP and port data (Issue 45)
+            ip = ""
+            ports = ""
 
         print '<tr>'
         print ("<td>" + hostname + "</td>")

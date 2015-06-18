@@ -24,12 +24,11 @@ UI for managing virtual machines and accessing the VNC console.
 
 First, ensure Docker and KVM are both installed on your system. Follow the
 distribution-specific instructions to ensure KVM works. We only require
-`qemu-kvm`. We do not need `libvirt`. On Ubuntu 14.04, you
-can type `kvm-ok` to make sure KVM is supported.
+KVM to be enabled in the kernel. We do not need any user space tools
+like `qemu-kvm` or `libvirt`. On Ubuntu 14.04, you can make sure KVM is
+enabled by checking that both devices `/dev/kvm` and `/dev/net/tun` exist.
 
-    $ kvm-ok
-    INFO: /dev/kvm exists
-    KVM acceleration can be used
+You can run RancherVM on RancherOS. If you are running RancherOS 0.3.1 or later, KVM is already enabled in the kernel.
 
 An easy way to run KVM on your Windows or Mac laptop is to use nested
 virtualization with VMware Workstation or VMware Fusion. Just enable

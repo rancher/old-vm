@@ -37,3 +37,55 @@ virtual machines. For example, when we deploy RancherVM in Rancher, we disable t
 in VM containers. Rancher manages its own DHCP service, creates virtual networking, and allocates
 IP addresses from its own database. Other deployments may use alternative means of configuring
 virtual machine networking. As an example, cloud-init also eliminates the need for DHCP.
+
+## Bridge to the Host Network
+
+It is possible to configure RancherVM to bridge its eth0 to host network.
+
+Assuming you are running Ubuntu host and your host is connected to its physical network via `eth0`. If you run CentOS or Fedora, the step should be similar, but you need to use the corresponding networking commands for your Linux distro.
+
+First you need to create a bridge in your host for `eth0`. Setup your `/etc/network/interfaces` file as follows:
+
+    auto lo
+    iface lo inet loopback
+
+    auto eth0
+    iface eth0 inet manual
+
+    auto br0
+    iface br0 inet dhcp
+        bridge_ports eth0
+        bridge_stp off
+        bridge_fd 0
+        bridge_maxwait 0
+
+Running ifconfig on the host should give you something like this:
+
+    # ifconfig
+    br0       Link encap:Ethernet  HWaddr 00:0c:29:24:8a:81  
+          inet addr:192.168.111.158  Bcast:192.168.111.255  Mask:255.255.255.0
+          inet6 addr: fe80::20c:29ff:fe24:8a81/64 Scope:Link
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:2354 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:2012 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:0 
+          RX bytes:1202270 (1.2 MB)  TX bytes:250767 (250.7 KB)
+
+    eth0      Link encap:Ethernet  HWaddr 00:0c:29:24:8a:81  
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:1539 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:1347 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:580472 (580.4 KB)  TX bytes:209948 (209.9 KB)
+
+Note IP address is now set on `br0`. And `eth0` and `br0` have the same MAC.
+
+You can now change Docker daemon to use `br0` instead of `docker0`:
+
+    # service docker stop
+    # echo 'DOCKER_OPTS="-b=br0"' >> /etc/default/docker
+    # service docker start
+
+Now RancherVMs started with `NO_DHCP=true` will get their IP from host DHCP.
+
+One gotcha: Docker will assign IPs from the same range to regular non-RancherVM containers. To avoid IP conflicts, you should provide an IP range for Docker containers to the Docker daemon `--fixed-cidr=...` and make sure your DHCP server does not hand out IPs in that range.

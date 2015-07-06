@@ -75,3 +75,4 @@ is documented in [RancherVM Networking](docs/networking.md).
 
 Just type `make`
 
+RancherVM uses a modified version of noVNC at `https://github.com/rancherio/noVNC`.

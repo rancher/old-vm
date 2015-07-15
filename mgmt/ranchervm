@@ -308,9 +308,13 @@ if form.getvalue("action") == "create":
 if form.getvalue("action") == "delete":
     id = form.getvalue("id")
     try:
-        docker_client.remove_container(id);
+        docker_client.remove_container(id, v=True);
+        os.remove("/ranchervm/vm/%s/vnc" % id)
+        os.rmdir("/ranchervm/vm/%s" % id)
     except docker.errors.APIError as e:
         exit_script("Failed to delete", str(e), 1)
+    except OSError as e:
+        exit_script("Failed to delete VNC socket", str(e), 1)
     exit_script("Deleted", "Instance " + id + " removed", 0)
 
 if form.getvalue("action") == "start":

@@ -1,0 +1,6 @@
+# space separated list of images
+# format: <name> <url>
+#android https://s3-us-west-1.amazonaws.com/sheng/qcow2/android-4.4-r2.gz.qcow2
+ubuntu https://s3-us-west-1.amazonaws.com/sheng/qcow2/ubuntu-14.04-amd64.img
+rancheros https://s3-us-west-1.amazonaws.com/sheng/qcow2/rancheros-0.3.0-gz.img
+#centos https://s3-us-west-1.amazonaws.com/sheng/qcow2/centos.7-1.x86-64.20150401.qcow2

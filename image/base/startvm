@@ -2,6 +2,12 @@
 
 #set -x
 
+# For debugging
+if [ "$1" = "bash" ]; then
+  exec bash
+fi
+
+
 # These two variables can be overwritten
 
 : ${KVM_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
@@ -9,10 +15,6 @@
 : ${KVM_NET_OPTS:="-netdev bridge,br=\$BRIDGE_IFACE,id=net0 \
 -device virtio-net-pci,netdev=net0,mac=\$MAC"}
 
-# For debugging
-if [ "$1" = "bash" ]; then
-  exec bash
-fi
 
 # Pass Docker command args to kvm
 KVM_ARGS=$@
@@ -48,8 +50,25 @@ fi
 # 1. Create a bridge named br0
 # 2. Remove IP from eth0, save eth0 MAC, give eth0 a random MAC
 
-IFACE=eth0
-BRIDGE_IFACE=br0
+function atoi
+{
+  #Returns the integer representation of an IP arg, passed in ascii dotted-decimal notation (x.x.x.x)
+  IP=$1; IPNUM=0
+  for (( i=0 ; i<4 ; ++i )); do
+  ((IPNUM+=${IP%%.*}*$((256**$((3-${i}))))))
+  IP=${IP#*.}
+  done
+  echo $IPNUM 
+} 
+ 
+function itoa
+{
+  #returns the dotted-decimal ascii form of an IP arg passed in integer format
+  echo -n $(($(($(($((${1}/256))/256))/256))%256)).
+  echo -n $(($(($((${1}/256))/256))%256)).
+  echo -n $(($((${1}/256))%256)).
+  echo $((${1}%256)) 
+}
 
 cidr2mask() {
   local i mask=""
@@ -69,6 +88,11 @@ cidr2mask() {
 
   echo $mask
 }
+
+
+IFACE=eth0
+BRIDGE_IFACE=br0
+
 
 MAC=`ip addr show $IFACE | grep ether | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*\$//g' | cut -f2 -d ' '`
 IP=`ip addr show dev $IFACE | grep "inet $IP_PREFIX" | awk '{print $2}' | cut -f1 -d/`
@@ -98,26 +122,6 @@ NEWMAC=`echo 06:FE$end`
 
 let "NEWCIDR=$CIDR-1"
 #NEWNETMASK=`cidr2mask $NEWCIDR`
-
-function atoi
-{
-#Returns the integer representation of an IP arg, passed in ascii dotted-decimal notation (x.x.x.x)
-IP=$1; IPNUM=0
-for (( i=0 ; i<4 ; ++i )); do
-((IPNUM+=${IP%%.*}*$((256**$((3-${i}))))))
-IP=${IP#*.}
-done
-echo $IPNUM 
-} 
- 
-function itoa
-{
-#returns the dotted-decimal ascii form of an IP arg passed in integer format
-echo -n $(($(($(($((${1}/256))/256))/256))%256)).
-echo -n $(($(($((${1}/256))/256))%256)).
-echo -n $(($((${1}/256))%256)).
-echo $((${1}%256)) 
-}
  
 i=`atoi $IP`
 let "i=$i^(1<<$CIDR)"

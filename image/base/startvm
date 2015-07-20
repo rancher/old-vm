@@ -19,16 +19,26 @@ fi
 # Pass Docker command args to kvm
 KVM_ARGS=$@
 
+BASEDIR=/base_image
+
+BASE_IMAGE_PATH=$BASEDIR/$IMAGE
+
+BASE_IMAGE_FILE=$BASE_IMAGE_PATH
+# use $IMAGE subdir/file if supplied. 
+# if resulting BASE_IMAGE is a dir, use the first file found.
+if [ -d "$BASE_IMAGE_PATH" ]; then
+  # use the first file as base image
+  BASE_IMAGE_FILE=$BASEDIR/$(ls -p $BASE_IMAGE_PATH | grep -v "/" | head -n1)
+  echo "Specified image $BASE_IMAGE_PATH is a directory. Using file $BASE_IMAGE_FILE"
+fi
+
+# resolve symlink as 'qemu-img create' doesn't like symlink
+BASE_IMAGE_FILE=$(readlink -e $BASE_IMAGE_FILE)
+
 # Create the qcow disk image on the Docker volume named /image, using
 # the compressed qcow image that came with Docker image as the base.
 # Docker volumes typically perform better than the file system for
 # Docker images (no need for overlay fs etc.)
-
-BASE_IMAGE_DIR_LIST=( `ls /base_image` )
-if [ ${#BASE_IMAGE_DIR_LIST[@]} -ne 1 ]; then
-  echo "/base_image directory must contain exactly one base image file"
-  exit 1
-fi
 
 if [ ! -d "/image" ]; then
   echo "/image directory does not exist, failed to mount volume /image?"
@@ -37,7 +47,7 @@ fi
 
 KVM_IMAGE=/image/sda.qcow2
 if [ ! -f "$KVM_IMAGE" ]; then
-  qemu-img create -f qcow2 -b /base_image/${BASE_IMAGE_DIR_LIST[0]} \
+  qemu-img create -f qcow2 -b $BASE_IMAGE_FILE \
   $KVM_IMAGE > /dev/null
   if [[ $? -ne 0 ]]; then
     echo "Failed to create qcow2 image"

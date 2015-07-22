@@ -15,7 +15,7 @@ if [ -z "$VM_NAME" ]; then
 fi
 
 
-if [ ! -f "$BASE_IMAGE_HOST/$IMAGE" ]; then
+if [ ! -e "$BASE_IMAGE_HOST/$IMAGE" ]; then
 	die "Error: no image dir $BASE_IMAGE_HOST/$IMAGE"
 fi
 

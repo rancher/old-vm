@@ -86,6 +86,5 @@ You can now change Docker daemon to use `br0` instead of `docker0`:
     # echo 'DOCKER_OPTS="-b=br0"' >> /etc/default/docker
     # service docker start
 
-Now RancherVMs started with `NO_DHCP=true` will get their IP from host DHCP.
+Now make sure to start RancherVMs with `NO_DHCP=true`, and the VMs will get their IP from host DHCP.
 
-One gotcha: Docker will assign IPs from the same range to regular non-RancherVM containers. To avoid IP conflicts, you should provide an IP range for Docker containers to the Docker daemon `--fixed-cidr=...` and make sure your DHCP server does not hand out IPs in that range.

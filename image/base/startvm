@@ -131,7 +131,9 @@ brctl addbr $BRIDGE_IFACE
 brctl addif $BRIDGE_IFACE $IFACE
 ip link set dev $IFACE up
 ip link set dev $BRIDGE_IFACE up
-ip addr add $NEWIP/$NEWCIDR dev $BRIDGE_IFACE
+if [ -z $NO_DHCP ]; then
+    ip addr add $NEWIP/$NEWCIDR dev $BRIDGE_IFACE
+fi
 
 if [[ $? -ne 0 ]]; then
     echo "Failed to bring up network bridge"

@@ -309,8 +309,8 @@ if form.getvalue("action") == "delete":
     id = form.getvalue("id")
     try:
         docker_client.remove_container(id, v=True);
-        os.remove("/ranchervm/vm/%s/vnc" % id)
-        os.rmdir("/ranchervm/vm/%s" % id)
+        os.remove("/vm/%s/vnc" % id)
+        os.rmdir("/vm/%s" % id)
     except docker.errors.APIError as e:
         exit_script("Failed to delete", str(e), 1)
     except OSError as e:
@@ -445,9 +445,9 @@ else:
         if status.startswith("Up"):
             start_stop_action = "<a href=\"ranchervm?action=stop&id=" \
                 + id + "\">Stop</a>"
-            if os.path.exists("/ranchervm/vm/" + id + "/vnc"):
+            if os.path.exists("/vm/" + id + "/vnc"):
                 console_delete_action = "<a href=\"/vnc_auto.html?title=" \
-                    + hostname + "&path=" + "ranchervm/vm/"  \
+                    + hostname + "&path=" + "vm/"  \
                     + id + "/vnc\" target=\"_blank\">Console</a>"
             else:
                 console_delete_action = ""

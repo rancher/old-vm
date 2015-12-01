@@ -43,6 +43,15 @@ if [ ! -f "$KVM_IMAGE" ]; then
   fi
 fi
 
+VOLUMES_DIR="/volumes/"
+VOLUMES_LIST=`find $VOLUMES_DIR -name "*.img"`
+extra_kvm_blk_opts=""
+for volume in $VOLUMES_LIST
+do
+	extra_kvm_blk_opts=$extra_kvm_blk_opts" -drive file=$volume,if=virtio"
+done
+KVM_BLK_OPTS=$KVM_BLK_OPTS$extra_kvm_blk_opts
+
 # Network setup:
 #
 # 1. Create a bridge named br0

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-docker push rancher/ranchervm:0.0.1
+docker push rancher/ranchervm:0.0.2
 docker push rancher/ranchervm:latest
-docker push rancher/vm-base:0.0.1
+docker push rancher/vm-base:0.0.2
 docker push rancher/vm-base:latest
 docker push rancher/vm-rancheros:0.3.0
 docker push rancher/vm-rancheros:latest

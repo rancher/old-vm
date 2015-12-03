@@ -22,15 +22,46 @@ itoa()
 	echo $((${1}%256))
 }
 
+fetch_rancher()
+{
+	name=$1
+	file=$2
+
+	curl -s http://rancher-metadata/latest/self/container/labels/$name > $file
+	if [ $? -ne 0 ]
+	then
+		return
+	fi
+	content=`cat $file`
+	if [[ $content == "Not found"* ]]
+	then
+		return
+	fi
+	echo $file
+	return
+}
+
+fetch_metadata()
+{
+	fetch_rancher io.rancher.vm.metadata metadata.rancher
+	return
+}
+
+fetch_userdata()
+{
+	fetch_rancher io.rancher.vm.userdata userdata.rancher
+	return
+}
+
 generate_cloud_drive()
 {
 	# get metadata and create cloud drive v2 for cloud-init
-	metadata="metadata"
+	metadata=`fetch_metadata`
 	if [ ! -f $metadata ]
 	then
 		metadata=""
 	fi
-	userdata="userdata"
+	userdata=`fetch_userdata`
 	if [ ! -f $userdata ]
 	then
 		userdata=""

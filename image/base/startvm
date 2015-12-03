@@ -277,7 +277,7 @@ echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf
 # won't get a VNC console socket.
 
 if [ -d /vm ]; then
-    DOCKERID=`grep "/docker" /proc/self/cgroup | cut -f 3 -d / | cut -f 2 -d - | cut -f 1 -d . | head -1`
+    DOCKERID=`cat /proc/self/cgroup | grep docker | awk -F/ '{print $NF}' | cut -f 2 -d - | cut -f 1 -d . | head -1`
     mkdir -p /vm/$DOCKERID
     VNC="-vnc unix:/vm/$DOCKERID/vnc"
     echo VNC server will listen on Unix socket /vm/$DOCKERID/vnc

@@ -154,7 +154,7 @@ if [ ! -f "$KVM_IMAGE" ]; then
 fi
 
 VOLUMES_DIR="/volumes/"
-VOLUMES_LIST=`find $VOLUMES_DIR -name "*.img"`
+VOLUMES_LIST=`find $VOLUMES_DIR -name "*.img" | sort -d`
 extra_kvm_blk_opts=""
 for volume in $VOLUMES_LIST
 do

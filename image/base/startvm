@@ -47,6 +47,12 @@ fetch_metadata()
 	return
 }
 
+fetch_os_metadata()
+{
+	fetch_rancher io.rancher.vm.os_metadata os_metadata.rancher
+	return
+}
+
 fetch_userdata()
 {
 	fetch_rancher io.rancher.vm.userdata userdata.rancher
@@ -56,6 +62,11 @@ fetch_userdata()
 generate_cloud_drive()
 {
 	# get metadata and create cloud drive v2 for cloud-init
+	os_metadata=`fetch_os_metadata`
+	if [ ! -f $os_metadata ]
+	then
+		os_metadata=""
+	fi
 	metadata=`fetch_metadata`
 	if [ ! -f $metadata ]
 	then
@@ -67,7 +78,7 @@ generate_cloud_drive()
 		userdata=""
 	fi
 
-	if [ "$metadata" == "" -a "$userdata" == "" ]
+	if [ "$metadata" == "" -a "$userdata" == "" -a "$os_metadata" == "" ]
 	then
 		return
 	fi
@@ -83,20 +94,19 @@ generate_cloud_drive()
 	for i in ${dirs[@]}
 	do
 		dir=$TMPDIR$i
+		metadatasrc=$metadata
+		metafile=$dir"meta_data.json"
+		userfile=$dir"user_data"
 		if [[ $i == "/openstack"* ]]
 		then
-			metafile=$dir"meta_data.json"
-			userfile=$dir"user_data"
-		else
-			metafile=$dir"meta-data.json"
-			userfile=$dir"user-data"
+			metadatasrc=$os_metadata
 		fi
 		mkdir -p $dir
-		if [[ $metadata ]]
+		if [[ -e "$metadatasrc" ]]
 		then
-			cp $metadata $metafile
+			cp $metadatasrc $metafile
 		fi
-		if [[ $userdata ]]
+		if [[ -e "$userdata" ]]
 		then
 			cp $userdata $userfile
 		fi
@@ -215,6 +225,7 @@ then
 		echo "Fail to get the ip address in Rancher network"
 		exit 1
 	fi
+	GATEWAY=$(curl -s http://rancher-metadata/latest/self/container/labels/io.rancher.vm.metadata | jq -r '.["local-ipv4-gateway"]')
 fi
 
 # need to wait until network is ready
@@ -228,7 +239,9 @@ MAC=`ip addr show $IFACE | grep ether | sed -e 's/^[[:space:]]*//g' -e 's/[[:spa
 IP=`ip addr show dev $IFACE | grep "inet $IP" | awk '{print $2}' | cut -f1 -d/`
 CIDR=`ip addr show dev $IFACE | grep "inet $IP" | awk '{print $2}' | cut -f2 -d/`
 NETMASK=`cidr2mask $CIDR`
-GATEWAY=`ip route get 8.8.8.8 | grep via | cut -f3 -d ' '`
+if [ -z "$GATEWAY" ]; then
+	GATEWAY=`ip route get 8.8.8.8 | grep via | cut -f3 -d ' '`
+fi
 NAMESERVER=( `grep nameserver /etc/resolv.conf | grep -v "#" | cut -f2 -d ' '` )
 NAMESERVERS=`echo ${NAMESERVER[*]} | sed "s/ /,/"`
 

@@ -19,4 +19,4 @@ tag_latest:
 	docker tag -f $(NAME):$(VERSION) $(NAME):latest
 
 run:
-	docker run -v /var/run:/var/run -p 8080:80 -v /tmp/ranchervm:/ranchervm $(NAME):$(VERSION)
+	docker run -v /var/run:/var/run -p 8080:80 -v /var/lib/rancher/vm:/vm $(NAME):$(VERSION)

@@ -2,6 +2,126 @@
 
 #set -x
 
+atoi()
+{
+	#Returns the integer representation of an IP arg, passed in ascii dotted-decimal notation (x.x.x.x)
+	IP=$1; IPNUM=0
+	for (( i=0 ; i<4 ; ++i )); do
+	((IPNUM+=${IP%%.*}*$((256**$((3-${i}))))))
+	IP=${IP#*.}
+	done
+	echo $IPNUM
+}
+
+itoa()
+{
+	#returns the dotted-decimal ascii form of an IP arg passed in integer format
+	echo -n $(($(($(($((${1}/256))/256))/256))%256)).
+	echo -n $(($(($((${1}/256))/256))%256)).
+	echo -n $(($((${1}/256))%256)).
+	echo $((${1}%256))
+}
+
+fetch_rancher()
+{
+	name=$1
+	file=$2
+
+	curl -s http://rancher-metadata/latest/self/container/labels/$name > $file
+	if [ $? -ne 0 ]
+	then
+		return
+	fi
+	content=`cat $file`
+	if [[ $content == "Not found"* ]]
+	then
+		return
+	fi
+	echo $file
+	return
+}
+
+fetch_metadata()
+{
+	fetch_rancher io.rancher.vm.metadata metadata.rancher
+	return
+}
+
+fetch_os_metadata()
+{
+	fetch_rancher io.rancher.vm.os_metadata os_metadata.rancher
+	return
+}
+
+fetch_userdata()
+{
+	fetch_rancher io.rancher.vm.userdata userdata.rancher
+	return
+}
+
+generate_cloud_drive()
+{
+	# get metadata and create cloud drive v2 for cloud-init
+	os_metadata=`fetch_os_metadata`
+	if [ ! -f $os_metadata ]
+	then
+		os_metadata=""
+	fi
+	metadata=`fetch_metadata`
+	if [ ! -f $metadata ]
+	then
+		metadata=""
+	fi
+	userdata=`fetch_userdata`
+	if [ ! -f $userdata ]
+	then
+		userdata=""
+	fi
+
+	if [ "$metadata" == "" -a "$userdata" == "" -a "$os_metadata" == "" ]
+	then
+		return
+	fi
+	TMPDIR=`mktemp -d -t ranchervm.XXXXXX`
+	if [ $? -ne 0 ]
+	then
+		echo Fail to create temporaily directory
+		exit 1
+	fi
+
+	dirs=("/openstack/2012-08-10/" "/openstack/latest/" \
+	      "/ec2/2009-04-04/" "/ec2/latest/")
+	for i in ${dirs[@]}
+	do
+		dir=$TMPDIR$i
+		metadatasrc=$metadata
+		metafile=$dir"meta_data.json"
+		userfile=$dir"user_data"
+		if [[ $i == "/openstack"* ]]
+		then
+			metadatasrc=$os_metadata
+		fi
+		mkdir -p $dir
+		if [[ -e "$metadatasrc" ]]
+		then
+			cp $metadatasrc $metafile
+		fi
+		if [[ -e "$userdata" ]]
+		then
+			cp $userdata $userfile
+		fi
+	done
+	iso="cloud-drive.iso"
+	genisoimage -allow-lowercase -allow-multidot -J -l -ldots -o $iso \
+		    -publisher Rancher -quiet -r -V config-2 $TMPDIR
+	if [ $? -ne 0 ]
+	then
+		echo Fail to create cloud-drive ISO image for cloud-init
+		exit 1
+	fi
+	echo $iso
+}
+
 # These two variables can be overwritten
 
 : ${KVM_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
@@ -44,7 +164,7 @@ if [ ! -f "$KVM_IMAGE" ]; then
 fi
 
 VOLUMES_DIR="/volumes/"
-VOLUMES_LIST=`find $VOLUMES_DIR -name "*.img"`
+VOLUMES_LIST=`find $VOLUMES_DIR -name "*.img" | sort -d`
 extra_kvm_blk_opts=""
 for volume in $VOLUMES_LIST
 do
@@ -79,12 +199,50 @@ cidr2mask() {
   echo $mask
 }
 
+RETRY_TIMES=10
+RETRY_INTERVAL=5
+IP=""
+if [ "$RANCHER_NETWORK" = "true" ]
+then
+	ready=0
+	for i in `seq 1 $RETRY_TIMES`
+	do
+		IP=`curl -s http://rancher-metadata/latest/self/container/primary_ip`
+		if [ $? -eq 0 ]
+		then
+			tmp=`ip addr show dev $IFACE | grep "inet $IP"`
+			if [ $? -eq 0 ]
+			then
+				ready=1
+				break
+			fi
+		fi
+		echo Waiting to get ip with Rancher network
+		sleep $RETRY_INTERVAL
+	done
+	if [ $ready -eq 0 ]
+	then
+		echo "Fail to get the ip address in Rancher network"
+		exit 1
+	fi
+	GATEWAY=$(curl -s http://rancher-metadata/latest/self/container/labels/io.rancher.vm.metadata | jq -r '.["local-ipv4-gateway"]')
+fi
+
+# need to wait until network is ready
+ISO=`generate_cloud_drive`
+if [[ $ISO ]]
+then
+	KVM_BLK_OPTS=$KVM_BLK_OPTS" -cdrom $ISO"
+fi
+
 MAC=`ip addr show $IFACE | grep ether | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*\$//g' | cut -f2 -d ' '`
-IP=`ip addr show dev $IFACE | grep "inet $IP_PREFIX" | awk '{print $2}' | cut -f1 -d/`
-CIDR=`ip addr show dev $IFACE | grep "inet $IP_PREFIX" | awk '{print $2}' | cut -f2 -d/`
+IP=`ip addr show dev $IFACE | grep "inet $IP" | awk '{print $2}' | cut -f1 -d/`
+CIDR=`ip addr show dev $IFACE | grep "inet $IP" | awk '{print $2}' | cut -f2 -d/`
 NETMASK=`cidr2mask $CIDR`
-GATEWAY=`ip route get 8.8.8.8 | grep via | cut -f3 -d ' '`
-NAMESERVER=( `grep nameserver /etc/resolv.conf | cut -f2 -d ' '` )
+if [ -z "$GATEWAY" ]; then
+	GATEWAY=`ip route get 8.8.8.8 | grep via | cut -f3 -d ' '`
+fi
+NAMESERVER=( `grep nameserver /etc/resolv.conf | grep -v "#" | cut -f2 -d ' '` )
 NAMESERVERS=`echo ${NAMESERVER[*]} | sed "s/ /,/"`
 
 cat > /etc/dnsmasq.conf << EOF
@@ -108,26 +266,6 @@ NEWMAC=`echo 06:FE$end`
 let "NEWCIDR=$CIDR-1"
 #NEWNETMASK=`cidr2mask $NEWCIDR`
 
-function atoi
-{
-#Returns the integer representation of an IP arg, passed in ascii dotted-decimal notation (x.x.x.x)
-IP=$1; IPNUM=0
-for (( i=0 ; i<4 ; ++i )); do
-((IPNUM+=${IP%%.*}*$((256**$((3-${i}))))))
-IP=${IP#*.}
-done
-echo $IPNUM 
-} 
- 
-function itoa
-{
-#returns the dotted-decimal ascii form of an IP arg passed in integer format
-echo -n $(($(($(($((${1}/256))/256))/256))%256)).
-echo -n $(($(($((${1}/256))/256))%256)).
-echo -n $(($((${1}/256))%256)).
-echo $((${1}%256)) 
-}
- 
 i=`atoi $IP`
 let "i=$i^(1<<$CIDR)"
 NEWIP=`itoa i`
@@ -153,14 +291,14 @@ fi
 
 echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf 
 
-# If /ranchervm does not exist, we still proceed with running KVM. We just
+# If /vm does not exist, we still proceed with running KVM. We just
 # won't get a VNC console socket.
 
-if [ -d /ranchervm ]; then
-    DOCKERID=`grep "/docker" /proc/self/cgroup | cut -f 3 -d / | cut -f 2 -d - | cut -f 1 -d . | head -1`
-    mkdir -p /ranchervm/vm/$DOCKERID
-    VNC="-vnc unix:/ranchervm/vm/$DOCKERID/vnc"
-    echo VNC server will listen on Unix socket /ranchervm/vm/$DOCKERID/vnc
+if [ -d /vm ]; then
+    DOCKERID=`cat /proc/self/cgroup | grep docker | awk -F/ '{print $NF}' | cut -f 2 -d - | cut -f 1 -d . | head -1`
+    mkdir -p /vm/$DOCKERID
+    VNC="-vnc unix:/vm/$DOCKERID/vnc"
+    echo VNC server will listen on Unix socket /vm/$DOCKERID/vnc
 fi
 
 exec kvm $VNC `eval echo $KVM_BLK_OPTS` `eval echo $KVM_NET_OPTS` $KVM_ARGS

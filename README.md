@@ -36,7 +36,7 @@ virtualization with VMware Workstation or VMware Fusion. Just enable
 
 Once you have Docker and KVM both setup, run:
 
-    docker run -v /var/run:/var/run -p 8080:80 -v /tmp/ranchervm:/ranchervm rancher/ranchervm
+    docker run -v /var/run:/var/run -p 8080:80 -v /var/lib/rancher/vm:/vm rancher/ranchervm
 
 and point your browser to `https://<KVM hostname>:8080`
 
@@ -44,7 +44,7 @@ You can create VM containers through the web UI or create them directly
 using Docker command line as follows:
 
     docker run -e "RANCHER_VM=true" --cap-add NET_ADMIN -v \
-        /tmp/ranchervm:/ranchervm --device /dev/kvm:/dev/kvm \
+        /var/lib/rancher/vm:/vm --device /dev/kvm:/dev/kvm \
         --device /dev/net/tun:/dev/net/tun rancher/vm-rancheros
 
 When you run a VM container from the command line, the system prints a
@@ -56,7 +56,7 @@ creates the exact same RancherOS VM and additionally specifies memory size
 and virtual CPU count.
 
     docker run -e "RANCHER_VM=true" --cap-add NET_ADMIN -v \
-        /tmp/ranchervm:/ranchervm --device /dev/kvm:/dev/kvm \
+        /var/lib/rancher/vm:/vm --device /dev/kvm:/dev/kvm \
         --device /dev/net/tun:/dev/net/tun rancher/vm-rancheros -m 1024m -smp 1
 
 Rancher creates 2 IP addresses in the container and that confuses the

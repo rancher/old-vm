@@ -31,7 +31,7 @@ of the VM images included with RancherVM to build your own VM image.
 The following, for example, is the Dockerfile for building RancherOS
 VM:
 
-    FROM rancher/vm-base:0.0.1
+    FROM rancher/vm-base:0.0.2
     COPY rancheros-0.3.0-gz.img /base_image/rancheros-0.3.0-gz.img
     CMD ["-m 512m"]
 

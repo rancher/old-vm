@@ -5,4 +5,5 @@ RUN apt-get update && \
 COPY startvm /var/lib/rancher/startvm
 ENTRYPOINT ["/var/lib/rancher/startvm"]
 VOLUME /image
+EXPOSE 22
 CMD []

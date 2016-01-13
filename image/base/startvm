@@ -27,7 +27,7 @@ fetch_rancher()
 	name=$1
 	file=$2
 
-	curl -s http://rancher-metadata/latest/self/container/labels/$name > $file
+	curl -s http://rancher-metadata/2015-07-25/self/container/labels/$name > $file
 	if [ $? -ne 0 ]
 	then
 		return
@@ -281,7 +281,7 @@ then
 	ready=0
 	for i in `seq 1 $RETRY_TIMES`
 	do
-		IP=`curl -s http://rancher-metadata/latest/self/container/primary_ip`
+		IP=`curl -s http://rancher-metadata/2015-07-25/self/container/primary_ip`
 		if [ $? -eq 0 ]
 		then
 			tmp=`ip addr show dev $IFACE | grep "inet $IP"`
@@ -299,7 +299,7 @@ then
 		echo "Fail to get the ip address in Rancher network"
 		exit 1
 	fi
-	GATEWAY=$(curl -s http://rancher-metadata/latest/self/container/labels/io.rancher.vm.metadata | jq -r '.["local-ipv4-gateway"]')
+	GATEWAY=$(curl -s http://rancher-metadata/2015-07-25/self/container/labels/io.rancher.vm.metadata | jq -r '.["local-ipv4-gateway"]')
 fi
 
 # need to wait until network is ready

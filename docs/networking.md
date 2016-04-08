@@ -2,7 +2,7 @@
 
 RancherVM enables VM containers to be managed exactly like regular Docker
 containers. The user performs the same set of actions whether he
-manages a regaulr Ubuntu container or a VM container running an
+manages a regular Ubuntu container or a VM container running an
 Unbuntu VM inside.
 
 In order to make native container management experience work for virtual machines,

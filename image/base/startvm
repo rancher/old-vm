@@ -228,7 +228,9 @@ then
 	GATEWAY=$(curl -s http://rancher-metadata/latest/self/container/labels/io.rancher.vm.metadata | jq -r '.["local-ipv4-gateway"]')
 fi
 
-# need to wait until network is ready
+# Temporary workaroiund: sleep for 30s to allow rancher to finish inject IP
+sleep 30
+
 ISO=`generate_cloud_drive`
 if [[ $ISO ]]
 then

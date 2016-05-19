@@ -5,7 +5,9 @@ BASE_IMAGE=android-4.4-r2.gz.qcow2
 all: build tag_latest
 
 build: $(BASE_IMAGE)
-	docker build -t $(NAME):$(VERSION) .
+	cp ../base/* .
+	cat Dockerfile.extra >> Dockerfile
+	docker build --build-arg BASE_IMAGE=$(BASE_IMAGE) -t $(NAME):$(VERSION) .
 
 $(BASE_IMAGE):
 	wget https://s3-us-west-1.amazonaws.com/sheng/qcow2/$(BASE_IMAGE)

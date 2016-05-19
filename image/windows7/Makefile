@@ -1,10 +1,13 @@
 NAME = rancher/vm-windows7
 VERSION = 0.0.3
+BASE_IMAGE = NEED_WINDOWS_IMAGE_FILE
 
 all: build tag_latest
 
 build:
-	docker build -t $(NAME):$(VERSION) .
+	cp ../base/* .
+	cat Dockerfile.extra >> Dockerfile
+	docker build --build-arg BASE_IMAGE=$(BASE_IMAGE) -t $(NAME):$(VERSION) .
 
 tag_latest:
 	docker tag -f $(NAME):$(VERSION) $(NAME):latest

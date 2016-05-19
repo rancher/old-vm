@@ -1,4 +1,6 @@
 FROM ubuntu:14.04.2
+ARG BASE_IMAGE=image
+COPY $BASE_IMAGE /base_image/$BASE_IMAGE
 RUN apt-get update && \
     apt-get install -y qemu-kvm dnsmasq \
 		       bridge-utils genisoimage curl jq

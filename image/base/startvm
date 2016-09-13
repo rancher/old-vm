@@ -251,7 +251,7 @@ EOF
     #NEWNETMASK=`cidr2mask $NEWCIDR`
 
     i=`atoi $IP`
-    let "i=$i^(1<<$CIDR)"
+    let "i=$i^(1<<(32-$CIDR))"
     NEWIP=`itoa i`
 
     ip link set dev $IFACE down

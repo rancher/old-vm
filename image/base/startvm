@@ -276,18 +276,20 @@ EOF
     echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf
 }
 
+#TODO: Skip
 # need to wait until network is ready
-ISO=`generate_cloud_drive`
-if [[ $ISO ]]
-then
-	KVM_BLK_OPTS=$KVM_BLK_OPTS" -cdrom $ISO"
-fi
+#ISO=`generate_cloud_drive`
+#if [[ $ISO ]]
+#then
+#	KVM_BLK_OPTS=$KVM_BLK_OPTS" -cdrom $ISO"
+#fi
 
-if [ "$RANCHER_NETWORK" = "true" ] && [ -e /var/run/rancher/tap.sock ]; then
-    setup_tap
-else
-    setup_bridge_networking
-fi
+# TODO: Skip
+#if [ "$RANCHER_NETWORK" = "true" ] && [ -e /var/run/rancher/tap.sock ]; then
+#    setup_tap
+#else
+#    setup_bridge_networking
+#fi
 
 
 # If /vm does not exist, we still proceed with running KVM. We just
@@ -299,4 +301,4 @@ if [ -d /vm ]; then
     echo VNC server will listen on Unix socket /vm/$DOCKERID/vnc
 fi
 
-exec $LAUNCHER qemu-system-x86_64 -enable-kvm  $VNC `eval echo $KVM_BLK_OPTS` `eval echo $KVM_NET_OPTS` -usbdevice tablet $KVM_ARGS
+exec $LAUNCHER qemu-system-x86_64 -enable-kvm  -vnc 0.0.0.0:1 `eval echo $KVM_BLK_OPTS` `eval echo $KVM_NET_OPTS` -usbdevice tablet $KVM_ARGS

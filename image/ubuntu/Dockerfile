@@ -1,2 +1,2 @@
-FROM rancher/vm-base:0.0.3
+FROM scratch
 COPY ubuntu-14.04-amd64.img /base_image/ubuntu-14.04-amd64.img

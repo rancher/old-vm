@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vm-pod
+  labels:
+    app: vm-pod
+spec:
+  hostNetwork: true
+  volumes:
+  - name: vm-tools-dir
+    hostPath:
+      path: /tmp/rancher/vm-tools
+  - name: vm-image
+    hostPath:
+      path: /tmp/rancher/vm-image
+  - name: dev-kvm
+    hostPath:
+      path: /dev/kvm
+  - name: vm-tools-var
+    hostPath:
+      path: /tmp/rancher/vm-tools/var
+  - name: vm-tools-usr
+    hostPath:
+      path: /tmp/rancher/vm-tools/usr
+  - name: vm-tools-bin
+    hostPath:
+      path: /tmp/rancher/vm-tools/bin
+  - name: vm-tools-lib
+    hostPath:
+      path: /tmp/rancher/vm-tools/lib
+  - name: vm-tools-lib64
+    hostPath:
+      path: /tmp/rancher/vm-tools/lib64
+  - name: vm-tools-etc
+    hostPath:
+      path: /tmp/rancher/vm-tools/etc
+  initContainers:
+  - name: vm-tools
+    image: leodotcloud/vm-tools:v1.0
+    volumeMounts:
+    - name: vm-tools-dir
+      mountPath: /vm-tools
+  containers:
+  - name: vm-container
+    image: leodotcloud/vm-ubuntu:14.04
+    command: ['/usr/bin/startvm']
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: vm-image
+      mountPath: /image
+    - name: dev-kvm
+      mountPath: /dev/kvm
+    - name: vm-tools-var
+      mountPath: /var
+    - name: vm-tools-usr
+      mountPath: /usr
+    - name: vm-tools-bin
+      mountPath: /bin
+    - name: vm-tools-lib
+      mountPath: /lib
+    - name: vm-tools-lib64
+      mountPath: /lib64
+    - name: vm-tools-etc
+      mountPath: /etc
+
+

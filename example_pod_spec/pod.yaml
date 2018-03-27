@@ -25,6 +25,9 @@ spec:
   - name: vm-tools-bin
     hostPath:
       path: /tmp/rancher/vm-tools/bin
+  - name: vm-tools-sbin
+    hostPath:
+      path: /tmp/rancher/vm-tools/sbin
   - name: vm-tools-lib
     hostPath:
       path: /tmp/rancher/vm-tools/lib
@@ -34,18 +37,24 @@ spec:
   - name: vm-tools-etc
     hostPath:
       path: /tmp/rancher/vm-tools/etc
+  - name: vm-socket
+    emptyDir: {}
   initContainers:
   - name: vm-tools
-    image: leodotcloud/vm-tools:v1.0
+    image: llparse/vm-tools:0.0.1
     volumeMounts:
     - name: vm-tools-dir
       mountPath: /vm-tools
   containers:
-  - name: vm-container
+  - name: vm
     image: leodotcloud/vm-ubuntu:14.04
     command: ['/usr/bin/startvm']
+    env:
+    - name: IFACE
+      value: ens33
     securityContext:
       privileged: true
+    # TODO the volume mounts should really be readonly, since we will share this filesystem with other pods
     volumeMounts:
     - name: vm-image
       mountPath: /image
@@ -57,11 +66,24 @@ spec:
       mountPath: /usr
     - name: vm-tools-bin
       mountPath: /bin
+    - name: vm-tools-sbin
+      mountPath: /sbin
     - name: vm-tools-lib
       mountPath: /lib
     - name: vm-tools-lib64
       mountPath: /lib64
     - name: vm-tools-etc
       mountPath: /etc
-
-
+    - name: vm-socket
+      mountPath: /vm
+  - name: novnc
+    image: llparse/novnc:0.0.1
+    # command: ['/bin/sleep']
+    # args: ['999999']
+    command: ['novnc']
+    args: ['--listen', '6080', '--unix', '/vm/vnc.sock']
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: vm-socket
+      mountPath: /vm

@@ -18,6 +18,8 @@ usage() {
     echo "                          Default: 6080"
     echo "    --vnc VNC_HOST:PORT   VNC server host:port proxy target"
     echo "                          Default: localhost:5900"
+    echo "    --unix TARGET         VNC server unix socket target"
+    echo "                          If specified, --vnc is ignored"
     echo "    --cert CERT           Path to combined cert/key file"
     echo "                          Default: self.pem"
     echo "    --web WEB             Path to web files (e.g. vnc.html)"
@@ -32,6 +34,7 @@ REAL_NAME="$(readlink -f $0)"
 HERE="$(cd "$(dirname "$REAL_NAME")" && pwd)"
 PORT="6080"
 VNC_DEST="localhost:5900"
+UNIX_DEST=""
 CERT=""
 WEB=""
 proxy_pid=""
@@ -60,6 +63,7 @@ while [ "$*" ]; do
     case $param in
     --listen)  PORT="${OPTARG}"; shift            ;;
     --vnc)     VNC_DEST="${OPTARG}"; shift        ;;
+    --unix)    UNIX_DEST="${OPTARG}"; shift       ;;
     --cert)    CERT="${OPTARG}"; shift            ;;
     --web)     WEB="${OPTARG}"; shift            ;;
     --ssl-only) SSLONLY="--ssl-only"             ;;
@@ -141,8 +145,12 @@ else
 fi
 
 echo "Starting webserver and WebSockets proxy on port ${PORT}"
-#${HERE}/websockify --web ${WEB} ${CERT:+--cert ${CERT}} ${PORT} ${VNC_DEST} &
-${WEBSOCKIFY} ${SSLONLY} --web ${WEB} ${CERT:+--cert ${CERT}} ${PORT} ${VNC_DEST} &
+if [ "x$UNIX_DEST" == "x" ]; then
+    ${WEBSOCKIFY} ${SSLONLY} --web ${WEB} ${CERT:+--cert ${CERT}} ${PORT} ${VNC_DEST} &
+else
+    ${WEBSOCKIFY} ${SSLONLY} --web ${WEB} ${CERT:+--cert ${CERT}} --unix-target ${UNIX_DEST} ${PORT} &
+fi
+
 proxy_pid="$!"
 sleep 1
 if ! ps -p ${proxy_pid} >/dev/null; then

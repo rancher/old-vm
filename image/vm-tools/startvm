@@ -158,7 +158,8 @@ setup_bridge() {
 
   # Gather information from the target interface
   # FIXME we probably want the mask as well, else ifconfig <iface> <ip> will assume a /16 subnet
-  inet4=$(ifconfig $target_iface | grep "inet " | awk '{print $2}' | cut -d':' -f2)
+  inet_addr=$(ifconfig $target_iface | grep "inet " | awk '{print $2}' | cut -d':' -f2)
+  inet_mask=$(ifconfig $target_iface | grep "inet " | awk '{print $4}' | cut -d':' -f2)
   default_gw=$(route | grep ^default | awk '{print $2}')
 
   # Bring the target interface down
@@ -178,7 +179,7 @@ setup_bridge() {
   ifconfig $target_iface 0.0.0.0 promisc
 
   # Move the ip address to the bridge
-  ifconfig $bridge_iface $inet4
+  ifconfig $bridge_iface $inet_addr netmask $inet_mask
 
   # Add default route
   route add default gw $default_gw
@@ -267,4 +268,4 @@ if [ -d /vm ]; then
 fi
 
 # Run as PID 1
-exec $LAUNCHER qemu-system-x86_64 -enable-kvm  -vnc 0.0.0.0:1 `eval echo $KVM_BLK_OPTS` `eval echo $KVM_NET_OPTS` -usbdevice tablet $KVM_ARGS
+exec $LAUNCHER qemu-system-x86_64 -enable-kvm  -vnc 0.0.0.0:0 `eval echo $KVM_BLK_OPTS` `eval echo $KVM_NET_OPTS` -usbdevice tablet $KVM_ARGS

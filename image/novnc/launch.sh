@@ -17,9 +17,8 @@ usage() {
     echo "    --listen PORT         Port for proxy/webserver to listen on"
     echo "                          Default: 6080"
     echo "    --vnc VNC_HOST:PORT   VNC server host:port proxy target"
-    echo "                          Default: localhost:5900"
     echo "    --unix TARGET         VNC server unix socket target"
-    echo "                          If specified, --vnc is ignored"
+    echo "                          Default: /vm/{podns}_{podname}.sock"
     echo "    --cert CERT           Path to combined cert/key file"
     echo "                          Default: self.pem"
     echo "    --web WEB             Path to web files (e.g. vnc.html)"
@@ -29,12 +28,15 @@ usage() {
     exit 2
 }
 
+# load pod label key/value pairs provided by downward API
+source /podinfo/labels 
+
 NAME="$(basename $0)"
 REAL_NAME="$(readlink -f $0)"
 HERE="$(cd "$(dirname "$REAL_NAME")" && pwd)"
 PORT="6080"
-VNC_DEST="localhost:5900"
-UNIX_DEST=""
+VNC_DEST=""
+UNIX_DEST="/vm/${MY_POD_NAMESPACE}_$podname.sock"
 CERT=""
 WEB=""
 proxy_pid=""

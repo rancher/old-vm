@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: vm-pod
+  namespace: default
   labels:
     app: vm-pod
 spec:
@@ -38,7 +39,8 @@ spec:
     hostPath:
       path: /tmp/rancher/vm-tools/etc
   - name: vm-socket
-    emptyDir: {}
+    hostPath:
+      path: /tmp/rancher/vm-socks
   initContainers:
   - name: vm-tools
     image: llparse/vm-tools:0.0.1
@@ -52,6 +54,15 @@ spec:
     env:
     - name: IFACE
       value: ens33
+    # Use downward API so we can uniquely name VNC socket
+    - name: MY_POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: MY_POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
     securityContext:
       privileged: true
     # TODO the volume mounts should really be readonly, since we will share this filesystem with other pods
@@ -76,14 +87,53 @@ spec:
       mountPath: /etc
     - name: vm-socket
       mountPath: /vm
+---
+# We use a different pod with isolated net namespace so we don't have to worry
+# about port conflicts between multiple VM-pods on a node.
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: default
+  name: novnc-pod
+  labels:
+    app: novnc
+    podname: vm-pod
+spec:
+  volumes:
+  - name: vm-socket
+    hostPath:
+      path: /tmp/rancher/vm-socks
+  - name: podinfo
+    downwardAPI:
+      items:
+      - path: labels
+        fieldRef:
+          fieldPath: metadata.labels
+  containers:
   - name: novnc
     image: llparse/novnc:0.0.1
-    # command: ['/bin/sleep']
-    # args: ['999999']
+    # TODO add TLS
     command: ['novnc']
-    args: ['--listen', '6080', '--unix', '/vm/vnc.sock']
-    securityContext:
-      privileged: true
+    env:
+    - name: MY_POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
     volumeMounts:
     - name: vm-socket
       mountPath: /vm
+    - name: podinfo
+      mountPath: /podinfo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: novnc-pod
+spec:
+  ports:
+  - name: novnc
+    port: 6080
+  selector:
+    app: novnc
+    podname: vm-pod
+  type: NodePort

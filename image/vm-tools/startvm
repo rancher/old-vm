@@ -261,8 +261,9 @@ MAC=`gen_mac`
 # If /vm does not exist, we still proceed with running KVM. We just
 # won't get a VNC console socket.
 if [ -d /vm ]; then
-  VNC="-vnc unix:/vm/vnc.sock"
-  echo VNC server will listen on Unix socket /vm/vnc.sock
+  sockpath="/vm/${MY_POD_NAMESPACE}_${MY_POD_NAME}.sock"
+  VNC="-vnc unix:$sockpath"
+  echo VNC server will listen on Unix socket $sockpath
 fi
 
 # Run as PID 1

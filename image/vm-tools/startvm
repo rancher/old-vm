@@ -261,11 +261,14 @@ MAC=`gen_mac`
 # If /vm does not exist, we still proceed with running KVM. We just
 # won't get a VNC console socket.
 if [ -d /vm ]; then
-    DOCKERID=`cat /proc/self/cgroup | grep docker | awk -F/ '{print $NF}' | cut -f 2 -d - | cut -f 1 -d . | head -1`
-    mkdir -p /vm/$DOCKERID
-    VNC="-vnc unix:/vm/$DOCKERID/vnc"
-    echo VNC server will listen on Unix socket /vm/$DOCKERID/vnc
+  VNC="-vnc unix:/vm/vnc.sock"
+  echo VNC server will listen on Unix socket /vm/vnc.sock
 fi
 
 # Run as PID 1
-exec $LAUNCHER qemu-system-x86_64 -enable-kvm  -vnc 0.0.0.0:0 `eval echo $KVM_BLK_OPTS` `eval echo $KVM_NET_OPTS` -usbdevice tablet $KVM_ARGS
+exec $LAUNCHER qemu-system-x86_64 \
+  -enable-kvm \
+  $VNC \
+  `eval echo $KVM_BLK_OPTS` \
+  `eval echo $KVM_NET_OPTS` \
+  -usbdevice tablet $KVM_ARGS

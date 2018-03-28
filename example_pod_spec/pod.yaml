@@ -48,7 +48,6 @@ spec:
           fieldPath: metadata.namespace
     securityContext:
       privileged: true
-    # TODO the volume mounts should really be readonly, since we will share this filesystem with other pods
     volumeMounts:
     - name: vm-image
       mountPath: /image
@@ -58,24 +57,31 @@ spec:
       mountPath: /vm
     - name: vm-fs
       mountPath: /bin
+      readOnly: true
       subPath: bin
     - name: vm-fs
       mountPath: /etc
+      readOnly: true
       subPath: etc
     - name: vm-fs
       mountPath: /lib
+      readOnly: true
       subPath: lib
     - name: vm-fs
       mountPath: /lib64
+      readOnly: true
       subPath: lib64
     - name: vm-fs
       mountPath: /sbin
+      readOnly: true
       subPath: sbin
     - name: vm-fs
       mountPath: /usr
+      readOnly: true
       subPath: usr
     - name: vm-fs
       mountPath: /var
+      readOnly: true
       subPath: var
 ---
 # We use a different pod with isolated net namespace so we don't have to worry

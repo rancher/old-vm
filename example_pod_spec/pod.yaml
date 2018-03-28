@@ -12,8 +12,7 @@ spec:
     hostPath:
       path: /tmp/rancher/vm-fs
   - name: vm-image
-    hostPath:
-      path: /tmp/rancher/vm-image
+    emptyDir: {}
   - name: vm-socket
     hostPath:
       path: /tmp/rancher/vm-socks
@@ -28,7 +27,7 @@ spec:
       mountPath: /vm-tools
   containers:
   - name: vm
-    image: leodotcloud/vm-ubuntu:14.04
+    image: llparse/vm-centos:7.1
     command: ['/usr/bin/startvm']
     env:
     - name: IFACE

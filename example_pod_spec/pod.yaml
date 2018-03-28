@@ -54,6 +54,10 @@ spec:
     env:
     - name: IFACE
       value: ens33
+    - name: MEMORY_MB
+      value: "512"
+    - name: CPUS
+      value: "1"
     # Use downward API so we can uniquely name VNC socket
     - name: MY_POD_NAME
       valueFrom:

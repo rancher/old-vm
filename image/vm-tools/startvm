@@ -26,6 +26,8 @@ itoa()
 
 : ${IFACE:="eth0"}
 : ${BRIDGE_IFACE:="br0"}
+: ${MEMORY_MB:="128"}
+: ${CPUS:="1"}
 
 : ${KVM_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
 -device virtio-blk-pci,scsi=off,drive=drive-disk0,id=virtio-disk0,bootindex=1"}
@@ -119,6 +121,7 @@ must_exist() {
   which $1 &> /dev/null
   if [ "$?" != "0" ]; then
     echo "Missing $1. Aborting."
+    exit 5
   fi
 }
 
@@ -157,7 +160,6 @@ setup_bridge() {
   fi
 
   # Gather information from the target interface
-  # FIXME we probably want the mask as well, else ifconfig <iface> <ip> will assume a /16 subnet
   inet_addr=$(ifconfig $target_iface | grep "inet " | awk '{print $2}' | cut -d':' -f2)
   inet_mask=$(ifconfig $target_iface | grep "inet " | awk '{print $4}' | cut -d':' -f2)
   default_gw=$(route | grep ^default | awk '{print $2}')
@@ -269,6 +271,8 @@ fi
 # Run as PID 1
 exec $LAUNCHER qemu-system-x86_64 \
   -enable-kvm \
+  -m size=$MEMORY_MB \
+  -smp cpus=$CPUS \
   $VNC \
   `eval echo $KVM_BLK_OPTS` \
   `eval echo $KVM_NET_OPTS` \

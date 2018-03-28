@@ -8,44 +8,23 @@ metadata:
 spec:
   hostNetwork: true
   volumes:
-  - name: vm-tools-dir
+  - name: vm-fs
     hostPath:
-      path: /tmp/rancher/vm-tools
+      path: /tmp/rancher/vm-fs
   - name: vm-image
     hostPath:
       path: /tmp/rancher/vm-image
-  - name: dev-kvm
-    hostPath:
-      path: /dev/kvm
-  - name: vm-tools-var
-    hostPath:
-      path: /tmp/rancher/vm-tools/var
-  - name: vm-tools-usr
-    hostPath:
-      path: /tmp/rancher/vm-tools/usr
-  - name: vm-tools-bin
-    hostPath:
-      path: /tmp/rancher/vm-tools/bin
-  - name: vm-tools-sbin
-    hostPath:
-      path: /tmp/rancher/vm-tools/sbin
-  - name: vm-tools-lib
-    hostPath:
-      path: /tmp/rancher/vm-tools/lib
-  - name: vm-tools-lib64
-    hostPath:
-      path: /tmp/rancher/vm-tools/lib64
-  - name: vm-tools-etc
-    hostPath:
-      path: /tmp/rancher/vm-tools/etc
   - name: vm-socket
     hostPath:
       path: /tmp/rancher/vm-socks
+  - name: dev-kvm
+    hostPath:
+      path: /dev/kvm
   initContainers:
   - name: vm-tools
     image: llparse/vm-tools:0.0.1
     volumeMounts:
-    - name: vm-tools-dir
+    - name: vm-fs
       mountPath: /vm-tools
   containers:
   - name: vm
@@ -75,22 +54,29 @@ spec:
       mountPath: /image
     - name: dev-kvm
       mountPath: /dev/kvm
-    - name: vm-tools-var
-      mountPath: /var
-    - name: vm-tools-usr
-      mountPath: /usr
-    - name: vm-tools-bin
-      mountPath: /bin
-    - name: vm-tools-sbin
-      mountPath: /sbin
-    - name: vm-tools-lib
-      mountPath: /lib
-    - name: vm-tools-lib64
-      mountPath: /lib64
-    - name: vm-tools-etc
-      mountPath: /etc
     - name: vm-socket
       mountPath: /vm
+    - name: vm-fs
+      mountPath: /bin
+      subPath: bin
+    - name: vm-fs
+      mountPath: /etc
+      subPath: etc
+    - name: vm-fs
+      mountPath: /lib
+      subPath: lib
+    - name: vm-fs
+      mountPath: /lib64
+      subPath: lib64
+    - name: vm-fs
+      mountPath: /sbin
+      subPath: sbin
+    - name: vm-fs
+      mountPath: /usr
+      subPath: usr
+    - name: vm-fs
+      mountPath: /var
+      subPath: var
 ---
 # We use a different pod with isolated net namespace so we don't have to worry
 # about port conflicts between multiple VM-pods on a node.

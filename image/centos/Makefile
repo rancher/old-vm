@@ -1,4 +1,4 @@
-NAME = rancher/vm-centos
+NAME = llparse/vm-centos
 VERSION = 7.1
 BASE_IMAGE = centos.7-1.x86-64.20150401.qcow2
 
@@ -16,8 +16,8 @@ clean:
 	rm -f $(BASE_IMAGE)
 
 tag_latest:
-	docker tag -f $(NAME):$(VERSION) $(NAME):latest
+	docker tag $(NAME):$(VERSION) $(NAME):latest
 
-test:
-	docker run -e "RANCHER_VM=true" --cap-add NET_ADMIN -it -v /var/lib/rancher/vm:/vm --device /dev/kvm:/dev/kvm --device /dev/net/tun:/dev/net/tun \
-	$(NAME):$(VERSION)
+push:
+	docker push $(NAME):$(VERSION)
+	docker push $(NAME):latest

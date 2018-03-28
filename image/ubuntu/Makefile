@@ -1,4 +1,4 @@
-NAME = leodotcloud/vm-ubuntu
+NAME = llparse/vm-ubuntu
 VERSION = 14.04
 BASE_IMAGE=ubuntu-14.04-amd64.img
 
@@ -18,6 +18,6 @@ clean:
 tag_latest:
 	docker tag $(NAME):$(VERSION) $(NAME):latest
 
-test:
-	docker run -e "RANCHER_VM=true" --cap-add NET_ADMIN -it -v /var/lib/rancher/vm:/vm --device /dev/kvm:/dev/kvm --device /dev/net/tun:/dev/net/tun \
-	$(NAME):$(VERSION)
+push:
+	docker push $(NAME):$(VERSION)
+	docker push $(NAME):latest

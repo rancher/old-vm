@@ -1,6 +1,8 @@
-NAME = rancher/vm-android
+NAME = llparse/vm-android-x86
 VERSION = 4.4
 BASE_IMAGE=android-4.4-r2.gz.qcow2
+
+.PHONY : all clean build
 
 all: build tag_latest
 
@@ -14,8 +16,8 @@ clean:
 	rm -f $(BASE_IMAGE)
 
 tag_latest:
-	docker tag -f $(NAME):$(VERSION) $(NAME):latest
+	docker tag $(NAME):$(VERSION) $(NAME):latest
 
-test:
-	docker run -e "RANCHER_VM=true" --cap-add NET_ADMIN -it -v /var/lib/rancher/vm:/vm --device /dev/kvm:/dev/kvm --device /dev/net/tun:/dev/net/tun \
-	$(NAME):$(VERSION)
+push:
+	docker push $(NAME):$(VERSION)
+	docker push $(NAME):latest

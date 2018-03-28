@@ -1,14 +1,23 @@
-NAME = rancher/vm-windows7
+NAME = llparse/vm-windows7
 VERSION = 0.0.3
+BASE_IMAGE=windows7-starter.qcow2
+
+.PHONY : all clean build
 
 all: build tag_latest
 
-build:
+build: $(BASE_IMAGE)
 	docker build -t $(NAME):$(VERSION) .
 
-tag_latest:
-	docker tag -f $(NAME):$(VERSION) $(NAME):latest
+$(BASE_IMAGE):
+	wget https://s3-us-west-1.amazonaws.com/sheng/qcow2/$(BASE_IMAGE)
 
-test:
-	docker run -e "RANCHER_VM=true" --cap-add NET_ADMIN -it -v /var/lib/rancher/vm:/vm --device /dev/kvm:/dev/kvm --device /dev/net/tun:/dev/net/tun \
-	$(NAME):$(VERSION)
+clean:
+	rm -f $(BASE_IMAGE)
+
+tag_latest:
+	docker tag $(NAME):$(VERSION) $(NAME):latest
+
+push:
+	docker push $(NAME):$(VERSION)
+	docker push $(NAME):latest

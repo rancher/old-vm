@@ -47,6 +47,23 @@ spec:
       valueFrom:
         fieldRef:
           fieldPath: metadata.namespace
+    livenessProbe:
+      exec:
+        command:
+        - /bin/sh
+        - -c
+        - "[ -S /vm/${MY_POD_NAMESPACE}_${MY_POD_NAME}.sock ]"
+      periodSeconds: 5
+      initialDelaySeconds: 2
+    # readinessProbe could be used for checking SSH/RDP/etc
+    readinessProbe:
+      exec:
+        command:
+        - /bin/sh
+        - -c
+        - "[ -S /vm/${MY_POD_NAMESPACE}_${MY_POD_NAME}.sock ]"
+      periodSeconds: 5
+      initialDelaySeconds: 2
     securityContext:
       privileged: true
     volumeMounts:

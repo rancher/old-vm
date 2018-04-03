@@ -22,12 +22,20 @@ itoa()
 	echo $((${1}%256))
 }
 
-# These two variables can be overwritten
+gen_mac() {
+  local end
+  local hexchars
+  hexchars="0123456789ABCDEF"
+  end=$( for i in {1..8} ; do echo -n ${hexchars:$(( $RANDOM % 16 )):1} ; done | sed -e 's/\(..\)/:\1/g' )
+  echo 06:FE$end
+}
 
+# These variables can be overwritten
 : ${IFACE:="eth0"}
 : ${BRIDGE_IFACE:="br0"}
 : ${MEMORY_MB:="128"}
 : ${CPUS:="1"}
+: ${MAC:=`gen_mac`}
 
 : ${KVM_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
 -device virtio-blk-pci,scsi=off,drive=drive-disk0,id=virtio-disk0,bootindex=1"}
@@ -123,14 +131,6 @@ must_exist() {
     echo "Missing $1. Aborting."
     exit 5
   fi
-}
-
-gen_mac() {
-  local end
-  local hexchars
-  hexchars="0123456789ABCDEF"
-  end=$( for i in {1..8} ; do echo -n ${hexchars:$(( $RANDOM % 16 )):1} ; done | sed -e 's/\(..\)/:\1/g' )
-  echo 06:FE$end
 }
 
 # TODO: network configuration should persist across reboots by managing /etc/network/interfaces
@@ -258,7 +258,6 @@ EOF
 }
 
 setup_bridge $IFACE $BRIDGE_IFACE
-MAC=`gen_mac`
 
 # If /vm does not exist, we still proceed with running KVM. We just
 # won't get a VNC console socket.

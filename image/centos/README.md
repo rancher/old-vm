@@ -1,3 +1,3 @@
 ## Default credentials:
-- Username: `root`
-- Password: `password`
+- Username: `rancher`
+- Password: `rancher`

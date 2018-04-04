@@ -1,23 +1,8 @@
-NAME = llparse/vm-ubuntu
-VERSION = 14.04
-BASE_IMAGE=ubuntu-14.04-amd64.img
+SUBDIRS := 16.04.4-desktop-amd64 16.04.4-server-amd64
 
-.PHONY : all clean build
+.PHONY : all $(SUBDIRS)
 
-all: build tag_latest
+all : $(SUBDIRS)
 
-build: $(BASE_IMAGE)
-	docker build -t $(NAME):$(VERSION) .
-
-$(BASE_IMAGE):
-	wget https://s3-us-west-1.amazonaws.com/sheng/qcow2/$(BASE_IMAGE)
-
-clean:
-	rm -f $(BASE_IMAGE)
-
-tag_latest:
-	docker tag $(NAME):$(VERSION) $(NAME):latest
-
-push:
-	docker push $(NAME):$(VERSION)
-	docker push $(NAME):latest
+$(SUBDIRS) :
+	$(MAKE) -C $@ all

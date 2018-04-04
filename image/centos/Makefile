@@ -1,23 +1,8 @@
-NAME = llparse/vm-centos
-VERSION = 7.1
-BASE_IMAGE = centos.7-1.x86-64.20150401.qcow2
+SUBDIRS := 6.9-x86_64-minimal 7-x86_64-minimal-1708
 
-.PHONY : all clean build
+.PHONY : all $(SUBDIRS)
 
-all: build tag_latest
+all : $(SUBDIRS)
 
-build: $(BASE_IMAGE)
-	docker build -t $(NAME):$(VERSION) .
-
-$(BASE_IMAGE):
-	wget https://s3-us-west-1.amazonaws.com/sheng/qcow2/$(BASE_IMAGE)
-
-clean:
-	rm -f $(BASE_IMAGE)
-
-tag_latest:
-	docker tag $(NAME):$(VERSION) $(NAME):latest
-
-push:
-	docker push $(NAME):$(VERSION)
-	docker push $(NAME):latest
+$(SUBDIRS) :
+	$(MAKE) -C $@ all

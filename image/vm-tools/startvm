@@ -194,10 +194,6 @@ setup_bridge() {
   done
   # sysctl -p
 
-  # Allow qemu to use the bridge
-  mkdir -p /etc/qemu
-  echo allow $bridge_iface > /etc/qemu/bridge.conf
-
   # Bring the interfaces up
   ifconfig $bridge_iface up
   ifconfig $target_iface up
@@ -258,6 +254,10 @@ EOF
 }
 
 setup_bridge $IFACE $BRIDGE_IFACE
+
+# Allow qemu to use the bridge
+mkdir -p /etc/qemu
+echo allow $bridge_iface > /etc/qemu/bridge.conf
 
 # If /vm does not exist, we still proceed with running KVM. We just
 # won't get a VNC console socket.

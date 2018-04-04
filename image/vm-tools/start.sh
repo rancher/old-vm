@@ -5,9 +5,11 @@ if [ ! -d /vm-tools ]; then
   exit 1
 fi
 
-echo "Extracting to vm-tools"
-tar xzf /opt/rancher/vm-tools/ubuntu_1604.tar.gz -C /vm-tools
-cp /opt/rancher/vm-tools/startvm /vm-tools/usr/bin/startvm
-echo "Extraction successful"
+if [ ! -f /vm-tools/.success ]; then
+  echo "Extracting filesystem to volume mounted at /vm-tools"
+  tar xzf /opt/rancher/vm-tools/ubuntu_1604.tar.gz -C /vm-tools
+  cp /opt/rancher/vm-tools/startvm /vm-tools/usr/bin/startvm
 
-exit 0
+  echo "Extraction successful"
+  touch /vm-tools/.success
+fi

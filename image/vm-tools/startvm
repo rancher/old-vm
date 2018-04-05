@@ -274,5 +274,4 @@ exec $LAUNCHER qemu-system-x86_64 \
   -smp cpus=$CPUS \
   $VNC \
   `eval echo $KVM_BLK_OPTS` \
-  `eval echo $KVM_NET_OPTS` \
-  -usbdevice tablet $KVM_ARGS
+  `eval echo $KVM_NET_OPTS` $KVM_ARGS

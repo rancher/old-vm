@@ -1,4 +1,4 @@
-SUBDIRS := base rancheros ubuntu centos android-x86 fedora
+SUBDIRS := 27-1.6.x86_64 Atomic-27-20180326.1.x86_64
 
 .PHONY : all $(SUBDIRS)
 

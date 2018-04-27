@@ -1,5 +1,5 @@
-hash: 28965950a950823a3b110e022e89ed67c17d15c233d1e4f3bc91502ecd624f1c
-updated: 2018-04-27T00:12:10.805900564-07:00
+hash: 031a994f54798b96df346ee49b3b8bac50c5a8a5fca7ce3c31cb73bc8f47b9c4
+updated: 2018-04-27T10:54:10.105313084-07:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 782f4967f2dc4564575ca782fe2d04090b5faca8
@@ -134,6 +134,7 @@ imports:
   - certificates/v1beta1
   - core/v1
   - extensions/v1beta1
+  - imagepolicy/v1alpha1
   - networking/v1
   - policy/v1beta1
   - rbac/v1

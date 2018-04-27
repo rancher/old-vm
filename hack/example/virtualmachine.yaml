@@ -9,4 +9,3 @@ spec:
   image: ubuntu:16.04.4-server-amd64
   public_keys:
   - james
-  - jimmy

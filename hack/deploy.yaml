@@ -127,7 +127,7 @@ spec:
             topologyKey: "kubernetes.io/hostname"
       containers:
       - name: vm-controller
-        image: llparse/ranchervm-controller
+        image: rancher/vm
         imagePullPolicy: Always
         args:
         - -vm
@@ -158,7 +158,7 @@ spec:
             topologyKey: "kubernetes.io/hostname"
       containers:
       - name: ranchervm-backend
-        image: llparse/ranchervm-controller
+        image: rancher/vm
         imagePullPolicy: Always
         args:
         - -backend
@@ -201,7 +201,7 @@ spec:
             topologyKey: "kubernetes.io/hostname"
       containers:
       - name: ranchervm-frontend
-        image: llparse/ranchervm-frontend
+        image: rancher/vm
         imagePullPolicy: Always
         env:
         - name: LONGHORN_MANAGER_IP
@@ -237,7 +237,7 @@ spec:
       hostNetwork: true
       containers:
       - name: ip-controller
-        image: llparse/ranchervm-controller
+        image: rancher/vm
         imagePullPolicy: Always
         command: [ "sh", "-c"]
         args:
@@ -248,7 +248,7 @@ spec:
             fieldRef:
               fieldPath: spec.nodeName
       - name: arp-scanner
-        image: llparse/ranchervm-controller
+        image: rancher/vm
         imagePullPolicy: Always
         command: [ "bash", "-c"]
         # This is probably too aggressive for anything bigger than class 3 network

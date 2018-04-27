@@ -1,4 +1,4 @@
-NAME = llparse/vm-rancheros
+NAME = rancher/vm-rancheros
 VERSION = 1.3.0-amd64
 BASE_IMAGE=RancherOS-$(VERSION).qcow2
 

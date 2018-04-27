@@ -1,4 +1,4 @@
-NAME = llparse/vm-ubuntu
+NAME = rancher/vm-ubuntu
 VERSION = 16.04.4-server-amd64
 BASE_IMAGE=ubuntu-$(VERSION).qcow2
 

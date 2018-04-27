@@ -1,4 +1,4 @@
-NAME = llparse/vm-fedora
+NAME = rancher/vm-fedora
 VERSION = 27-1.6.x86_64
 BASE_IMAGE=Fedora-Cloud-Base-$(VERSION).qcow2
 

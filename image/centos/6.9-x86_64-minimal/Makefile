@@ -1,4 +1,4 @@
-NAME = llparse/vm-centos
+NAME = rancher/vm-centos
 VERSION = 6.9-x86_64-minimal
 BASE_IMAGE=CentOS-$(VERSION).qcow2
 

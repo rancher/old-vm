@@ -1,4 +1,4 @@
-NAME = llparse/vm-windows7
+NAME = rancher/vm-windows7
 VERSION = 0.0.3
 BASE_IMAGE=windows7-starter.qcow2
 

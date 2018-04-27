@@ -1,4 +1,4 @@
-NAME = llparse/vm-fedora
+NAME = rancher/vm-fedora
 VERSION = Atomic-27-20180326.1.x86_64
 BASE_IMAGE=Fedora-$(VERSION).qcow2
 

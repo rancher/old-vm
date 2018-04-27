@@ -1,4 +1,4 @@
-NAME = llparse/novnc
+NAME = rancher/novnc
 VERSION = 0.0.1
 
 .PHONY : all clean build

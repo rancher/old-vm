@@ -1,4 +1,4 @@
-NAME = llparse/vm-tools
+NAME = rancher/vm-tools
 VERSION = 0.0.1
 
 .PHONY : all clean build

@@ -1,4 +1,4 @@
-SUBDIRS := 7 TinyXP
+SUBDIRS := 7
 
 .PHONY : all $(SUBDIRS)
 

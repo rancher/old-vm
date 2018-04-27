@@ -1,4 +1,4 @@
-NAME = llparse/vm-android-x86
+NAME = rancher/vm-android-x86
 VERSION = 4.4
 BASE_IMAGE=android-4.4-r2.gz.qcow2
 

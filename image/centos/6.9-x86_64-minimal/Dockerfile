@@ -1,3 +1,0 @@
-FROM scratch
-ARG BASE_IMAGE
-COPY ${BASE_IMAGE} /base_image/${BASE_IMAGE}

@@ -116,7 +116,7 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 
 	vmContainer := corev1.Container{
 		Name:            "vm",
-		Image:           fmt.Sprintf("llparse/vm-%s", string(vm.Spec.MachineImage)),
+		Image:           fmt.Sprintf("rancher/vm-%s", string(vm.Spec.MachineImage)),
 		ImagePullPolicy: corev1.PullAlways,
 		Command:         []string{"/usr/bin/startvm"},
 		Env: []corev1.EnvVar{
@@ -198,7 +198,7 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 			InitContainers: []corev1.Container{
 				corev1.Container{
 					Name:            "debootstrap",
-					Image:           "llparse/vm-tools:0.0.1",
+					Image:           "rancher/vm-tools:0.0.1",
 					ImagePullPolicy: corev1.PullAlways,
 					VolumeMounts: []corev1.VolumeMount{
 						makeVolumeMount("vm-fs", "/vm-tools", "", false),
@@ -253,7 +253,7 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine) *corev1.Pod {
 			Containers: []corev1.Container{
 				corev1.Container{
 					Name:    "novnc",
-					Image:   "llparse/novnc:0.0.1",
+					Image:   "rancher/novnc:0.0.1",
 					Command: []string{"novnc"},
 					Env: []corev1.EnvVar{
 						makeEnvVarFieldPath("MY_POD_NAMESPACE", "metadata.namespace"),

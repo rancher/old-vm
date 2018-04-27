@@ -23,13 +23,13 @@ spec:
       path: /dev/kvm
   initContainers:
   - name: vm-tools
-    image: llparse/vm-tools:0.0.1
+    image: rancher/vm-tools:0.0.1
     volumeMounts:
     - name: vm-fs
       mountPath: /vm-tools
   containers:
   - name: vm
-    image: llparse/vm-ubuntu
+    image: rancher/vm-ubuntu
     command: ['/usr/bin/startvm']
     env:
     - name: IFACE
@@ -126,7 +126,7 @@ spec:
           fieldPath: metadata.labels
   containers:
   - name: novnc
-    image: llparse/novnc:0.0.1
+    image: rancher/novnc:0.0.1
     # TODO add TLS
     command: ['novnc']
     env:

@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-TARGET_ROOTFS_DIR=/tmp/rootfs/ubuntu_1604
+TARGET_ROOTFS_DIR=/tmp/rootfs/RancherVM-debootstrap-ubuntu-1604
 mkdir -p ${TARGET_ROOTFS_DIR}
 
 INCLUDE_PKGS="vim,qemu-kvm,qemu-utils,bridge-utils,genisoimage,curl,net-tools"
@@ -17,4 +17,4 @@ rm -rf ${TARGET_ROOTFS_DIR}/var/cache/apt/archives/*.deb
 rm -rf ${TARGET_ROOTFS_DIR}/usr/share/man
 rm -rf ${TARGET_ROOTFS_DIR}/usr/share/locale
 
-tar cvzf ${TARGET_ROOTFS_DIR}.tar.gz -C ${TARGET_ROOTFS_DIR} .
+tar cvzf ${TARGET_ROOTFS_DIR}.tgz -C ${TARGET_ROOTFS_DIR} .

@@ -7,7 +7,7 @@ fi
 
 if [ ! -f /vm-tools/.success ]; then
   echo "Extracting filesystem to volume mounted at /vm-tools"
-  tar xzf /opt/rancher/vm-tools/ubuntu_1604.tar.gz -C /vm-tools
+  tar xzf /opt/rancher/vm-tools/RancherVM-debootstrap-ubuntu-1604.tgz -C /vm-tools
   cp /opt/rancher/vm-tools/startvm /vm-tools/usr/bin/startvm
 
   echo "Extraction successful"

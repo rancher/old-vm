@@ -1,0 +1,11 @@
+apiVersion: vm.rancher.com/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: example-ubuntu
+spec:
+  action: start
+  cpus: 1
+  memory_mb: 512
+  image: ubuntu:16.04.4-server-amd64
+  public_keys:
+  - james

@@ -1,0 +1,8 @@
+package: github.com/rancher/vm
+import:
+- package: k8s.io/apiextensions-apiserver
+  version: release-1.8
+- package: k8s.io/apimachinery
+  version: release-1.8
+- package: k8s.io/client-go
+  version: release-5.0

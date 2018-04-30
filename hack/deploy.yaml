@@ -1,0 +1,266 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ranchervm-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ranchervm-service-account
+  namespace: ranchervm-system
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: ranchervm-role
+rules:
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - "*"
+- apiGroups: [""]
+  resources: ["pods", "nodes", "services"]
+  verbs: ["*"]
+- apiGroups: ["vm.rancher.com"]
+  resources: ["virtualmachines"]
+  verbs: ["*"]
+- apiGroups: ["vm.rancher.com"]
+  resources: ["arptables"]
+  verbs: ["*"]
+- apiGroups: ["vm.rancher.com"]
+  resources: ["credentials"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: ranchervm-bind
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ranchervm-role
+subjects:
+- kind: ServiceAccount
+  name: ranchervm-service-account
+  namespace: ranchervm-system
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    ranchervm-system: VirtualMachine
+  name: virtualmachines.vm.rancher.com
+spec:
+  group: vm.rancher.com
+  version: v1alpha1
+  names:
+    kind: VirtualMachine
+    listKind: VirtualMachineList
+    plural: virtualmachines
+    shortNames:
+    - vm
+    - vms
+    singular: virtualmachine
+  scope: Cluster
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    ranchervm-system: ARPTable
+  name: arptables.vm.rancher.com
+spec:
+  group: vm.rancher.com
+  version: v1alpha1
+  names:
+    kind: ARPTable
+    listKind: ARPTableList
+    plural: arptables
+    shortNames:
+    - arp
+    - arps
+    singular: arptable
+  scope: Cluster
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    ranchervm-system: Credential
+  name: credentials.vm.rancher.com
+spec:
+  group: vm.rancher.com
+  version: v1alpha1
+  names:
+    kind: Credential
+    listKind: CredentialList
+    plural: credentials
+    shortNames:
+    - cred
+    - creds
+    singular: credential
+  scope: Cluster
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: vm-controller
+  namespace: ranchervm-system
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: vm-controller
+    spec:
+      hostNetwork: true
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values: ["vm-controller"]
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: vm-controller
+        image: rancher/vm
+        imagePullPolicy: Always
+        args:
+        - -vm
+        - -bridge-iface=eth1
+      serviceAccountName: ranchervm-service-account
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: ranchervm-backend
+  namespace: ranchervm-system
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ranchervm-backend
+    spec:
+      hostNetwork: true
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values: ["ranchervm-backend"]
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: ranchervm-backend
+        image: rancher/vm
+        imagePullPolicy: Always
+        args:
+        - -backend
+      serviceAccountName: ranchervm-service-account
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ranchervm-backend
+  namespace: ranchervm-system
+spec:
+  ports:
+  - name: api
+    port: 9500
+  selector:
+    app: ranchervm-backend
+  type: NodePort
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: ranchervm-frontend
+  namespace: ranchervm-system
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ranchervm-frontend
+    spec:
+      hostNetwork: true
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values: ["ranchervm-frontend"]
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: ranchervm-frontend
+        image: rancher/vm
+        imagePullPolicy: Always
+        env:
+        - name: LONGHORN_MANAGER_IP
+          value: "http://127.0.0.1:9500/v1/"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ranchervm-frontend
+  namespace: ranchervm-system
+spec:
+  ports:
+  - name: ui
+    port: 8000
+  selector:
+    app: ranchervm-frontend
+  type: NodePort
+---
+apiVersion: apps/v1beta2
+kind: DaemonSet
+metadata:
+  name: ip-controller
+  namespace: ranchervm-system
+spec:
+  selector:
+    matchLabels:
+      app: ip-controller
+  template:
+    metadata:
+      labels:
+        app: ip-controller
+    spec:
+      hostNetwork: true
+      containers:
+      - name: ip-controller
+        image: rancher/vm
+        imagePullPolicy: Always
+        command: [ "sh", "-c"]
+        args:
+        - exec /vm-controller -ip -nodename ${MY_NODE_NAME} -v 3
+        env:
+        - name: MY_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+      - name: arp-scanner
+        image: rancher/vm
+        imagePullPolicy: Always
+        command: [ "bash", "-c"]
+        # This is probably too aggressive for anything bigger than class 3 network
+        args:
+        - while true; do
+            iface=br0;
+            inet_addr=$(ifconfig $iface | grep "inet " | awk '{print $2}' | cut -d':' -f2);
+            inet_mask=$(ifconfig $iface | grep "inet " | awk '{print $4}' | cut -d':' -f2);
+            ips="$(arp-scan -interface=$iface $inet_addr:$inet_mask | awk -F'\t' '$2 ~ /[0-9a-f][0-9a-f]:/ {print $1}')";
+            for ip in $ips; do 
+              ping -c 1 -t 1 $ip &>/dev/null & 
+            done;
+            sleep 5;
+          done
+      serviceAccountName: ranchervm-service-account

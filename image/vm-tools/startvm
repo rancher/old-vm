@@ -1,0 +1,337 @@
+#!/bin/bash
+
+set -x
+
+atoi()
+{
+	#Returns the integer representation of an IP arg, passed in ascii dotted-decimal notation (x.x.x.x)
+	IP=$1; IPNUM=0
+	for (( i=0 ; i<4 ; ++i )); do
+	((IPNUM+=${IP%%.*}*$((256**$((3-${i}))))))
+	IP=${IP#*.}
+	done
+	echo $IPNUM
+}
+
+itoa()
+{
+	#returns the dotted-decimal ascii form of an IP arg passed in integer format
+	echo -n $(($(($(($((${1}/256))/256))/256))%256)).
+	echo -n $(($(($((${1}/256))/256))%256)).
+	echo -n $(($((${1}/256))%256)).
+	echo $((${1}%256))
+}
+
+gen_mac() {
+  local end
+  local hexchars
+  hexchars="0123456789ABCDEF"
+  end=$( for i in {1..8} ; do echo -n ${hexchars:$(( $RANDOM % 16 )):1} ; done | sed -e 's/\(..\)/:\1/g' )
+  echo 06:FE$end
+}
+
+# These variables can be overwritten
+: ${IFACE:="eth0"}
+: ${BRIDGE_IFACE:="br0"}
+: ${MEMORY_MB:="128"}
+: ${CPUS:="1"}
+: ${MAC:=`gen_mac`}
+
+: ${KVM_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
+-device virtio-blk-pci,scsi=off,drive=drive-disk0,id=virtio-disk0,bootindex=1"}
+: ${KVM_RAW_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=raw \
+-device virtio-blk-pci,scsi=off,drive=drive-disk0,id=virtio-disk0,bootindex=1"}
+: ${KVM_NET_OPTS:="-netdev bridge,br=\$BRIDGE_IFACE,id=net0 \
+-device virtio-net-pci,netdev=net0,mac=\$MAC"}
+
+# For debugging
+if [ "$1" = "bash" ]; then
+  exec bash
+fi
+
+# Pass Docker command args to kvm
+KVM_ARGS=$@
+
+# Create the qcow disk image on the Docker volume named /image, using
+# the compressed qcow image that came with Docker image as the base.
+# Docker volumes typically perform better than the file system for
+# Docker images (no need for overlay fs etc.)
+
+if [ -e /dev/vm/root ]; then
+    KVM_BLK_OPTS="$KVM_RAW_BLK_OPTS"
+    KVM_IMAGE=/dev/vm/root
+else
+    BASE_IMAGE_DIR_LIST=( `ls /base_image` )
+    if [ ${#BASE_IMAGE_DIR_LIST[@]} -ne 1 ]; then
+    echo "/base_image directory must contain exactly one base image file"
+    exit 1
+    fi
+
+    if [ ! -d "/image" ]; then
+    echo "/image directory does not exist, failed to mount volume /image?"
+    exit 2
+    fi
+
+    KVM_IMAGE=/image/sda.qcow2
+    if [ ! -f "$KVM_IMAGE" ]; then
+        qemu-img create -f qcow2 -b /base_image/${BASE_IMAGE_DIR_LIST[0]} \
+        $KVM_IMAGE > /dev/null
+        if [[ $? -ne 0 ]]; then
+            echo "Failed to create qcow2 image"
+            exit 3
+        fi
+    fi
+fi
+
+VOLUMES_DIR="/volumes/"
+VOLUMES_LIST=`find $VOLUMES_DIR -name "*.img" | sort -d`
+extra_kvm_blk_opts=""
+for volume in $VOLUMES_LIST /dev/vm/disk*
+do
+    if [ -e $volume ]; then
+        extra_kvm_blk_opts=$extra_kvm_blk_opts" -drive file=$volume,if=virtio,format=raw"
+    fi
+done
+KVM_BLK_OPTS=$KVM_BLK_OPTS$extra_kvm_blk_opts
+
+# Network setup:
+#
+# 1. Create a bridge named br0
+# 2. Remove IP from eth0, save eth0 MAC, give eth0 a random MAC
+
+cidr2mask() {
+  local i mask=""
+  local full_octets=$(($1/8))
+  local partial_octet=$(($1%8))
+
+  for ((i=0;i<4;i+=1)); do
+    if [ $i -lt $full_octets ]; then
+      mask+=255
+    elif [ $i -eq $full_octets ]; then
+      mask+=$((256 - 2**(8-$partial_octet)))
+    else
+      mask+=0
+    fi
+    test $i -lt 3 && mask+=.
+  done
+
+  echo $mask
+}
+
+setup_tap() {
+    MAC=`ip addr show $IFACE | grep ether | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*\$//g' | cut -f2 -d ' '`
+    ip link set dev eth0 down
+    LAUNCHER="tapclient --"
+    KVM_NET_OPTS="-netdev tap,fd=%FD%,id=hostnet0 -device virtio-net-pci,netdev=hostnet0,id=net0,mac=$MAC"
+}
+
+must_exist() {
+  which $1 &> /dev/null
+  if [ "$?" != "0" ]; then
+    echo "Missing $1. Aborting."
+    exit 5
+  fi
+}
+
+# TODO: network configuration should persist across reboots by managing /etc/network/interfaces
+setup_bridge() {
+  # This is the interface we are bridging
+  target_iface=$1
+  # This is the name of the bridge interface
+  bridge_iface=$2
+
+  # Ensure tools exist
+  must_exist ifconfig
+  must_exist brctl
+  must_exist route
+
+  # Ensure the target interface exists
+  ifconfig $target_iface &>/dev/null
+  if [ "$?" != "0" ]; then
+    echo "Target interface $target_iface does not exist"
+    exit 1
+  fi
+
+  # Ensure the bridge interface doesn't exist
+  ifconfig $bridge_iface &>/dev/null
+  if [ "$?" == "0" ]; then
+    echo "Bridge interface $bridge_iface already exists."
+    return
+  fi
+
+  # Gather information from the target interface
+  inet_addr=$(ifconfig $target_iface | grep "inet " | awk '{print $2}' | cut -d':' -f2)
+  inet_mask=$(ifconfig $target_iface | grep "inet " | awk '{print $4}' | cut -d':' -f2)
+  default_gw=$(route | grep ^default | awk '{print $2}')
+
+  # Bring the target interface down
+  ifconfig $target_iface down
+
+  # Create bridge device
+  brctl addbr $bridge_iface
+  if [ "$?" != "0" ]; then
+    echo Error creating bridge_iface device
+    exit 1
+  fi
+
+  # Add the target interface to the bridge
+  brctl addif $bridge_iface $target_iface
+
+  # Put the bridged interface into promiscuous mode
+  ifconfig $target_iface 0.0.0.0 promisc
+
+  # Move the ip address to the bridge
+  ifconfig $bridge_iface $inet_addr netmask $inet_mask
+
+  # Add default route
+  route add default gw $default_gw
+
+  # https://bugs.launchpad.net/ubuntu/+source/procps/+bug/50093
+  # Disable L2 traffic filtering
+  for f in /proc/sys/net/bridge/*; do
+    # echo "net.bridge.$f=0" >> /etc/sysctl.conf
+    echo 0 > $f
+  done
+  # sysctl -p
+
+  # Bring the interfaces up
+  ifconfig $bridge_iface up
+  ifconfig $target_iface up
+}
+
+setup_bridge_networking() {
+    MAC=`ip addr show $IFACE | grep ether | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*\$//g' | cut -f2 -d ' '`
+    IP=`ip addr show dev $IFACE | grep "inet $IP" | awk '{print $2}' | cut -f1 -d/`
+    CIDR=`ip addr show dev $IFACE | grep "inet $IP" | awk '{print $2}' | cut -f2 -d/`
+    NETMASK=`cidr2mask $CIDR`
+    GATEWAY=`ip route get 8.8.8.8 | grep via | cut -f3 -d ' '`
+    NAMESERVER=( `grep nameserver /etc/resolv.conf | grep -v "#" | cut -f2 -d ' '` )
+    NAMESERVERS=`echo ${NAMESERVER[*]} | sed "s/ /,/"`
+
+    cat > /etc/dnsmasq.conf << EOF
+user=root
+dhcp-range=$IP,$IP
+dhcp-host=$MAC,$HOSTNAME,$IP,infinite
+dhcp-option=option:router,$GATEWAY
+dhcp-option=option:netmask,$NETMASK
+dhcp-option=option:dns-server,$NAMESERVERS
+EOF
+
+    if [ -z $NO_DHCP ]; then
+        dnsmasq
+    fi
+
+    # Generate random new MAC address
+    hexchars="0123456789ABCDEF"
+    end=$( for i in {1..8} ; do echo -n ${hexchars:$(( $RANDOM % 16 )):1} ; done | sed -e 's/\(..\)/:\1/g' )
+    NEWMAC=`echo 06:FE$end`
+
+    let "NEWCIDR=$CIDR-1"
+    #NEWNETMASK=`cidr2mask $NEWCIDR`
+
+    i=`atoi $IP`
+    let "i=$i^(1<<$CIDR)"
+    NEWIP=`itoa i`
+
+    ip link set dev $IFACE down
+    ip link set $IFACE address $NEWMAC
+    ip addr del $IP/$CIDR dev $IFACE
+
+    brctl addbr $BRIDGE_IFACE
+    brctl addif $BRIDGE_IFACE $IFACE
+    ip link set dev $IFACE up
+    ip link set dev $BRIDGE_IFACE up
+    if [ -z $NO_DHCP ]; then
+        ip addr add $NEWIP/$NEWCIDR dev $BRIDGE_IFACE
+    fi
+
+    if [[ $? -ne 0 ]]; then
+        echo "Failed to bring up network bridge"
+        exit 4
+    fi
+
+    echo allow $BRIDGE_IFACE >  /etc/qemu/bridge.conf
+}
+
+setup_bridge $IFACE $BRIDGE_IFACE
+
+# Allow qemu to use the bridge
+mkdir -p /etc/qemu
+echo allow $bridge_iface > /etc/qemu/bridge.conf
+
+# If /vm does not exist, we still proceed with running KVM. We just
+# won't get a VNC console socket.
+if [ -d /vm ]; then
+  sockpath="/vm/${MY_POD_NAMESPACE}_${MY_POD_NAME}.sock"
+  VNC="-vnc unix:$sockpath"
+  echo VNC server will listen on Unix socket $sockpath
+fi
+
+
+if [ -f /base_image/RancherOS* ]; then
+  # Configure cloud-init
+  mkdir -p configdrive/openstack/latest
+  USER_DATA=configdrive/openstack/latest/user-data
+  META_DATA=configdrive/openstack/latest/meta-data
+  CI_ISO=cidata.iso
+
+  # cloud-init configuration
+  cat > $USER_DATA << EOF
+#cloud-config
+ssh_authorized_keys:
+EOF
+  for i in $(seq 1 $PUBLIC_KEY_COUNT); do
+    eval echo "  - \$PUBLIC_KEY_$i" >> $USER_DATA
+  done
+
+  # Create CD-ROM ISO with cloud-init config
+  # echo "$(date -R) Generating ISO for cloud-init..."
+  # mkisofs -R -V config-2 -o $CI_ISO configdrive
+
+  # Run as PID 1
+  exec $LAUNCHER qemu-system-x86_64 \
+    -enable-kvm \
+    -m size=$MEMORY_MB \
+    -smp cpus=$CPUS \
+    -fsdev local,id=conf,security_model=none,readonly,path=configdrive \
+    -device virtio-9p-pci,fsdev=conf,mount_tag=config-2 \
+    $VNC \
+    `eval echo $KVM_BLK_OPTS` \
+    `eval echo $KVM_NET_OPTS` $KVM_ARGS
+
+else
+  # Configure cloud-init
+  USER_DATA=user-data
+  META_DATA=meta-data
+  CI_ISO=cidata.iso
+
+  # cloud-init configuration
+  cat > $USER_DATA << EOF
+#cloud-config
+preserve_hostname: False
+hostname: $MY_POD_NAME.$MY_POD_NAMESPACE
+fqdn: $MY_POD_NAME.$MY_POD_NAMESPACE.local
+output: 
+  all: ">> /var/log/cloud-init.log"
+ssh_authorized_keys:
+EOF
+  for i in $(seq 1 $PUBLIC_KEY_COUNT); do
+    eval echo "  - \$PUBLIC_KEY_$i" >> $USER_DATA
+  done
+
+  echo "instance-id: $INSTANCE_ID; local-hostname: $MY_POD_NAME" > $META_DATA
+
+  # Create CD-ROM ISO with cloud-init config
+  echo "$(date -R) Generating ISO for cloud-init..."
+  genisoimage -output $CI_ISO -volid cidata -joliet -r $USER_DATA $META_DATA &>> $1.log
+
+  # Run as PID 1
+  exec $LAUNCHER qemu-system-x86_64 \
+    -enable-kvm \
+    -m size=$MEMORY_MB \
+    -smp cpus=$CPUS \
+    -cdrom $CI_ISO \
+    $VNC \
+    `eval echo $KVM_BLK_OPTS` \
+    `eval echo $KVM_NET_OPTS` $KVM_ARGS
+fi

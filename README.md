@@ -19,7 +19,7 @@ specification and reflects this in the VirtualMachine CRD status.
 RancherVM comes with a Web UI for managing public keys, compute nodes, virtual
 machines and accessing the VNC console from a web browser.
 
-![How it works](docs/ranchervm.png "How it works")
+![How it works](docs/highlevel.svg "How it works")
 
 ## Run
 

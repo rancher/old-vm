@@ -106,14 +106,14 @@ spec:
 apiVersion: apps/v1beta1
 kind: Deployment
 metadata:
-  name: vm-controller
+  name: ranchervm-controller
   namespace: ranchervm-system
 spec:
   replicas: 1
   template:
     metadata:
       labels:
-        app: vm-controller
+        app: ranchervm-controller
     spec:
       hostNetwork: true
       affinity:
@@ -123,15 +123,15 @@ spec:
               matchExpressions:
               - key: app
                 operator: In
-                values: ["vm-controller"]
+                values: ["ranchervm-controller"]
             topologyKey: "kubernetes.io/hostname"
       containers:
-      - name: vm-controller
+      - name: ranchervm-controller
         image: rancher/vm
         imagePullPolicy: Always
         args:
         - -vm
-        - -bridge-iface=eth1
+        - -bridge-iface=ens33
       serviceAccountName: ranchervm-service-account
 ---
 apiVersion: apps/v1beta1
@@ -241,7 +241,7 @@ spec:
         imagePullPolicy: Always
         command: [ "sh", "-c"]
         args:
-        - exec /vm-controller -ip -nodename ${MY_NODE_NAME} -v 3
+        - exec /ranchervm -ip -nodename ${MY_NODE_NAME} -v 3
         env:
         - name: MY_NODE_NAME
           valueFrom:

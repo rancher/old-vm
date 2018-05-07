@@ -10,6 +10,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const HostStateBaseDir = "/var/lib/rancher/vm"
+
 func makeEnvVar(name, value string, valueFrom *corev1.EnvVarSource) corev1.EnvVar {
 	return corev1.EnvVar{
 		Name:      name,
@@ -76,8 +78,6 @@ func makeVolumeMount(name, mountPath, subPath string, readOnly bool) corev1.Volu
 		MountPropagation: nil,
 	}
 }
-
-const HostStateBaseDir = "/var/lib/rancher"
 
 func makeHostStateVol(vmNamespace, vmName, volName string) corev1.Volume {
 	return corev1.Volume{

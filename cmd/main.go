@@ -74,7 +74,6 @@ func main() {
 			vmClientset,
 			vmInformerFactory.Virtualmachine().V1alpha1().ARPTables(),
 			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
-			kubeInformerFactory.Core().V1().Namespaces(),
 			*nodeName,
 		).Run(*workers, stopCh)
 	}

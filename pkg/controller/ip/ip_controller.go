@@ -12,8 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
-	coreinformers "k8s.io/client-go/informers/core/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
@@ -29,8 +27,6 @@ type IPDiscoveryController struct {
 	arpListerSynced cache.InformerSynced
 	vmLister        vmlisters.VirtualMachineLister
 	vmListerSynced  cache.InformerSynced
-	nsLister        corelisters.NamespaceLister
-	nsListerSynced  cache.InformerSynced
 	arpQueue        workqueue.RateLimitingInterface
 	nodeName        string
 }
@@ -39,7 +35,6 @@ func NewIPDiscoveryController(
 	crdClient vmclientset.Interface,
 	arpInformer vminformers.ARPTableInformer,
 	vmInformer vminformers.VirtualMachineInformer,
-	nsInformer coreinformers.NamespaceInformer,
 	nodeName string,
 ) *IPDiscoveryController {
 
@@ -49,8 +44,6 @@ func NewIPDiscoveryController(
 		arpListerSynced: arpInformer.Informer().HasSynced,
 		vmLister:        vmInformer.Lister(),
 		vmListerSynced:  vmInformer.Informer().HasSynced,
-		nsLister:        nsInformer.Lister(),
-		nsListerSynced:  nsInformer.Informer().HasSynced,
 		arpQueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtualmachine"),
 		nodeName:        nodeName,
 	}
@@ -72,7 +65,7 @@ func (ctrl *IPDiscoveryController) Run(workers int, stopCh <-chan struct{}) {
 	glog.Infof("Starting ip discovery controller")
 	defer glog.Infof("Shutting down ip discovery Controller")
 
-	if !cache.WaitForCacheSync(stopCh, ctrl.arpListerSynced, ctrl.vmListerSynced, ctrl.nsListerSynced) {
+	if !cache.WaitForCacheSync(stopCh, ctrl.arpListerSynced, ctrl.vmListerSynced) {
 		return
 	}
 

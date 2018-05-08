@@ -300,9 +300,7 @@ exec $LAUNCHER qemu-system-x86_64 \
   -m size=$MEMORY_MB \
   -smp cpus=$CPUS \
   -cdrom $CI_ISO \
-  -monitor unix:/vm/monitor.sock,server,nowait \
+  -qmp unix:/vm/monitor.sock,server,nowait \
   $VNC \
   `eval echo $KVM_BLK_OPTS` \
   `eval echo $KVM_NET_OPTS` $KVM_ARGS
-
-  # -monitor telnet:127.0.0.1:${MONITOR_PORT},server,nowait \

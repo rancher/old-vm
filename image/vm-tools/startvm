@@ -36,6 +36,7 @@ gen_mac() {
 : ${MEMORY_MB:="128"}
 : ${CPUS:="1"}
 : ${MAC:=`gen_mac`}
+: ${MONITOR_PORT:=$(($RANDOM%32768+32768))}
 
 : ${KVM_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
 -device virtio-blk-pci,scsi=off,drive=drive-disk0,id=virtio-disk0,bootindex=1"}
@@ -268,45 +269,13 @@ if [ -d /vm ]; then
 fi
 
 
-if [ -f /base_image/RancherOS* ]; then
-  # Configure cloud-init
-  mkdir -p configdrive/openstack/latest
-  USER_DATA=configdrive/openstack/latest/user-data
-  META_DATA=configdrive/openstack/latest/meta-data
-  CI_ISO=cidata.iso
+# Configure cloud-init
+USER_DATA=user-data
+META_DATA=meta-data
+CI_ISO=cidata.iso
 
-  # cloud-init configuration
-  cat > $USER_DATA << EOF
-#cloud-config
-ssh_authorized_keys:
-EOF
-  for i in $(seq 1 $PUBLIC_KEY_COUNT); do
-    eval echo "  - \$PUBLIC_KEY_$i" >> $USER_DATA
-  done
-
-  # Create CD-ROM ISO with cloud-init config
-  # echo "$(date -R) Generating ISO for cloud-init..."
-  # mkisofs -R -V config-2 -o $CI_ISO configdrive
-
-  # Run as PID 1
-  exec $LAUNCHER qemu-system-x86_64 \
-    -enable-kvm \
-    -m size=$MEMORY_MB \
-    -smp cpus=$CPUS \
-    -fsdev local,id=conf,security_model=none,readonly,path=configdrive \
-    -device virtio-9p-pci,fsdev=conf,mount_tag=config-2 \
-    $VNC \
-    `eval echo $KVM_BLK_OPTS` \
-    `eval echo $KVM_NET_OPTS` $KVM_ARGS
-
-else
-  # Configure cloud-init
-  USER_DATA=user-data
-  META_DATA=meta-data
-  CI_ISO=cidata.iso
-
-  # cloud-init configuration
-  cat > $USER_DATA << EOF
+# cloud-init configuration
+cat > $USER_DATA << EOF
 #cloud-config
 preserve_hostname: False
 hostname: $MY_POD_NAME.$MY_POD_NAMESPACE
@@ -315,23 +284,25 @@ output:
   all: ">> /var/log/cloud-init.log"
 ssh_authorized_keys:
 EOF
-  for i in $(seq 1 $PUBLIC_KEY_COUNT); do
-    eval echo "  - \$PUBLIC_KEY_$i" >> $USER_DATA
-  done
+for i in $(seq 1 $PUBLIC_KEY_COUNT); do
+  eval echo "  - \$PUBLIC_KEY_$i" >> $USER_DATA
+done
 
-  echo "instance-id: $INSTANCE_ID; local-hostname: $MY_POD_NAME" > $META_DATA
+echo "instance-id: $INSTANCE_ID; local-hostname: $MY_POD_NAME" > $META_DATA
 
-  # Create CD-ROM ISO with cloud-init config
-  echo "$(date -R) Generating ISO for cloud-init..."
-  genisoimage -output $CI_ISO -volid cidata -joliet -r $USER_DATA $META_DATA &>> $1.log
+# Create CD-ROM ISO with cloud-init config
+echo "$(date -R) Generating ISO for cloud-init..."
+genisoimage -output $CI_ISO -volid cidata -joliet -r $USER_DATA $META_DATA &>> $1.log
 
-  # Run as PID 1
-  exec $LAUNCHER qemu-system-x86_64 \
-    -enable-kvm \
-    -m size=$MEMORY_MB \
-    -smp cpus=$CPUS \
-    -cdrom $CI_ISO \
-    $VNC \
-    `eval echo $KVM_BLK_OPTS` \
-    `eval echo $KVM_NET_OPTS` $KVM_ARGS
-fi
+# Run as PID 1
+exec $LAUNCHER qemu-system-x86_64 \
+  -enable-kvm \
+  -m size=$MEMORY_MB \
+  -smp cpus=$CPUS \
+  -cdrom $CI_ISO \
+  -monitor unix:/vm/monitor.sock,server,nowait \
+  $VNC \
+  `eval echo $KVM_BLK_OPTS` \
+  `eval echo $KVM_NET_OPTS` $KVM_ARGS
+
+  # -monitor telnet:127.0.0.1:${MONITOR_PORT},server,nowait \

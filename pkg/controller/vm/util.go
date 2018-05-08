@@ -192,13 +192,13 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 			Volumes: []corev1.Volume{
 				makeHostStateVol(vm.Name, "vm-fs"),
 				makeHostStateVol(vm.Name, "vm-image"),
-				makeVolHostPath("vm-socket", "/tmp/rancher/vm-socks"),
+				makeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", HostStateBaseDir, vm.Name)),
 				makeVolHostPath("dev-kvm", "/dev/kvm"),
 			},
 			InitContainers: []corev1.Container{
 				corev1.Container{
 					Name:            "debootstrap",
-					Image:           "rancher/vm-tools:0.0.1",
+					Image:           "rancher/vm-tools:0.0.2",
 					ImagePullPolicy: corev1.PullAlways,
 					VolumeMounts: []corev1.VolumeMount{
 						makeVolumeMount("vm-fs", "/vm-tools", "", false),
@@ -247,7 +247,7 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine) *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
-				makeVolHostPath("vm-socket", "/tmp/rancher/vm-socks"),
+				makeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", HostStateBaseDir, vm.Name)),
 				makeVolFieldPath("podinfo", "labels", "metadata.labels"),
 			},
 			Containers: []corev1.Container{

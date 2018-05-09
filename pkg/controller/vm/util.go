@@ -97,7 +97,16 @@ func makeHostStateVol(vmName, volName string) corev1.Volume {
 
 var privileged = true
 
-func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, iface string, noResourceLimits bool) *corev1.Pod {
+func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {
+	var publicKeys []*v1alpha1.Credential
+	for _, publicKeyName := range vm.Spec.PublicKeys {
+		publicKey, err := ctrl.credLister.Get(publicKeyName)
+		if err != nil {
+			continue
+		}
+		publicKeys = append(publicKeys, publicKey)
+	}
+
 	cpu := strconv.Itoa(int(vm.Spec.Cpus))
 	mem := strconv.Itoa(int(vm.Spec.MemoryMB))
 	image := string(vm.Spec.MachineImage)
@@ -132,6 +141,7 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 			makeEnvVar("CPUS", cpu, nil),
 			makeEnvVar("MAC", vm.Status.MAC, nil),
 			makeEnvVar("INSTANCE_ID", vm.Status.ID, nil),
+			makeEnvVar("MIGRATE", strconv.FormatBool(migrate), nil),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			makeVolumeMount("vm-image", "/image", "", false),
@@ -203,7 +213,7 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 			InitContainers: []corev1.Container{
 				corev1.Container{
 					Name:            "debootstrap",
-					Image:           "rancher/vm-tools:0.0.2",
+					Image:           "rancher/vm-tools:0.0.3",
 					ImagePullPolicy: corev1.PullAlways,
 					VolumeMounts: []corev1.VolumeMount{
 						makeVolumeMount("vm-fs", "/vm-tools", "", false),
@@ -212,6 +222,22 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 			},
 			Containers: []corev1.Container{
 				vmContainer,
+			},
+			Affinity: &corev1.Affinity{
+				PodAntiAffinity: &corev1.PodAntiAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+						corev1.PodAffinityTerm{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app":  "ranchervm",
+									"name": vm.Name,
+									"role": "vm",
+								},
+							},
+							TopologyKey: "kubernetes.io/hostname",
+						},
+					},
+				},
 			},
 			HostNetwork: true,
 		},

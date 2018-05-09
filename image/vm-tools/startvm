@@ -36,6 +36,7 @@ gen_mac() {
 : ${MEMORY_MB:="128"}
 : ${CPUS:="1"}
 : ${MAC:=`gen_mac`}
+: ${MIGRATE:=false}
 
 : ${KVM_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
 -device virtio-blk-pci,scsi=off,drive=drive-disk0,id=virtio-disk0,bootindex=1"}
@@ -292,6 +293,10 @@ echo "instance-id: $INSTANCE_ID; local-hostname: $MY_POD_NAME" > $META_DATA
 # Create CD-ROM ISO with cloud-init config
 echo "$(date -R) Generating ISO for cloud-init..."
 genisoimage -output $CI_ISO -volid cidata -joliet -r $USER_DATA $META_DATA &>> $1.log
+
+if [ "${MIGRATE}" == "true" ]; then
+  KVM_ARGS="${KVM_ARGS} -incoming tcp:0:4444"
+fi
 
 # Run as PID 1
 exec $LAUNCHER qemu-system-x86_64 \

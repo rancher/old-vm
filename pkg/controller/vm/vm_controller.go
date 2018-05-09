@@ -1,7 +1,6 @@
 package vm
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -173,16 +172,7 @@ func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err
 		glog.V(2).Infof("more than one vm pod detected %s/%s: %v", NamespaceVM, vm.Name, pods)
 		return
 	} else {
-		var publicKeys []*vmapi.Credential
-		for _, publicKeyName := range vm.Spec.PublicKeys {
-			publicKey, err := ctrl.credLister.Get(publicKeyName)
-			if err != nil {
-				continue
-			}
-			publicKeys = append(publicKeys, publicKey)
-		}
-
-		_, err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(makeVMPod(vm, publicKeys, ctrl.bridgeIface, ctrl.noResourceLimits))
+		_, err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, false))
 		if err != nil {
 			glog.V(2).Infof("Error creating vm pod %s/%s: %v", NamespaceVM, vm.Name, err)
 			return
@@ -238,14 +228,6 @@ func (ctrl *VirtualMachineController) stopVM(vm *vmapi.VirtualMachine) (err erro
 	return
 }
 
-func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) (err error) {
-	if vm.Status.State != vmapi.StateRunning {
-		return errors.New(fmt.Sprintf("Migration unimplemented for VM in %s state", vm.Status.State))
-	}
-	// TODO do the migration
-	return nil
-}
-
 func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) {
 	// set the instance id, mac address, finalizer if not present
 	if vm.Status.ID == "" || vm.Status.MAC == "" || len(vm.Finalizers) == 0 {
@@ -259,6 +241,7 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) {
 		return
 	}
 
+	// TODO requeue if an error is returned by start/stop/migrate
 	switch vm.Spec.Action {
 	case vmapi.ActionStart:
 		ctrl.startVM(vm)
@@ -274,7 +257,6 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) {
 
 func (ctrl *VirtualMachineController) deleteVmPod(ns, name string) error {
 	glog.V(2).Infof("trying to delete vm pod %s/%s", ns, name)
-	// TODO soft delete?
 	return ctrl.kubeClient.CoreV1().Pods(ns).Delete(name, &metav1.DeleteOptions{})
 }
 

@@ -31,9 +31,10 @@ const (
 type ActionType string
 
 const (
-	ActionStart  ActionType = "start"
-	ActionStop   ActionType = "stop"
-	ActionReboot ActionType = "reboot"
+	ActionStart   ActionType = "start"
+	ActionStop    ActionType = "stop"
+	ActionReboot  ActionType = "reboot"
+	ActionMigrate ActionType = "migrate"
 )
 
 // VirtualMachineSpec is the spec for a VirtualMachine resource
@@ -44,11 +45,6 @@ type VirtualMachineSpec struct {
 	Action       ActionType       `json:"action"`
 	PublicKeys   []string         `json:"public_keys"`
 	HostedNovnc  bool             `json:"hosted_novnc"`
-	Disks        VDisk            `json:"disks"`
-}
-
-type VDisk struct {
-	Root bool
 }
 
 type StateType string

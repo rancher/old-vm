@@ -2,7 +2,9 @@ package vm
 
 import (
 	"fmt"
+	"math/rand"
 	"strconv"
+	"strings"
 
 	"github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -10,7 +12,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const HostStateBaseDir = "/var/lib/rancher/vm"
+const (
+	HostStateBaseDir = "/var/lib/rancher/vm"
+	nameDelimiter    = "-"
+)
 
 func makeEnvVar(name, value string, valueFrom *corev1.EnvVarSource) corev1.EnvVar {
 	return corev1.EnvVar{
@@ -174,7 +179,7 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: vm.Name,
+			Name: newPodName(vm.Name),
 			Labels: map[string]string{
 				"app":  "ranchervm",
 				"name": vm.Name,
@@ -211,6 +216,13 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 			HostNetwork: true,
 		},
 	}
+}
+
+func newPodName(name string) string {
+	return strings.Join([]string{
+		name,
+		fmt.Sprintf("%04x", rand.Uint32()),
+	}, nameDelimiter)
 }
 
 func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {

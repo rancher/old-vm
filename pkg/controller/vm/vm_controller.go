@@ -1,15 +1,18 @@
 package vm
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -142,8 +145,13 @@ func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err
 	vm2 := vm.DeepCopy()
 	vm2.Status.State = vmapi.StatePending
 
-	pod, err := ctrl.podLister.Pods(NamespaceVM).Get(vm.Name)
-	if err == nil {
+	pods, err := ctrl.podLister.Pods(NamespaceVM).List(labels.Set{
+		"name": vm.Name,
+	}.AsSelector())
+
+	// TODO this if/else statement needs simplifying
+	if err == nil && len(pods) == 1 {
+		pod := pods[0]
 		glog.V(2).Infof("Found existing vm pod %s/%s", pod.Namespace, pod.Name)
 		// TODO check the pod against the current spec and update, if necessary
 		if pod.DeletionTimestamp != nil {
@@ -158,8 +166,11 @@ func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err
 				vm2.Status.State = vmapi.StateRunning
 			}
 		}
-	} else if !apierrors.IsNotFound(err) {
-		glog.V(2).Infof("error getting vm pod %s/%s: %v", NamespaceVM, vm.Name, err)
+	} else if err != nil && !apierrors.IsNotFound(err) {
+		glog.V(2).Infof("error getting vm pod(s) %s/%s: %v", NamespaceVM, vm.Name, err)
+		return
+	} else if len(pods) > 1 {
+		glog.V(2).Infof("more than one vm pod detected %s/%s: %v", NamespaceVM, vm.Name, pods)
 		return
 	} else {
 		var publicKeys []*vmapi.Credential
@@ -227,6 +238,14 @@ func (ctrl *VirtualMachineController) stopVM(vm *vmapi.VirtualMachine) (err erro
 	return
 }
 
+func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) (err error) {
+	if vm.Status.State != vmapi.StateRunning {
+		return errors.New(fmt.Sprintf("Migration unimplemented for VM in %s state", vm.Status.State))
+	}
+	// TODO do the migration
+	return nil
+}
+
 func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) {
 	// set the instance id, mac address, finalizer if not present
 	if vm.Status.ID == "" || vm.Status.MAC == "" || len(vm.Finalizers) == 0 {
@@ -245,6 +264,8 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) {
 		ctrl.startVM(vm)
 	case vmapi.ActionStop:
 		ctrl.stopVM(vm)
+	case vmapi.ActionMigrate:
+		ctrl.migrateVM(vm)
 	default:
 		glog.Warningf("detected vm %s/%s with invalid action \"%s\"", NamespaceVM, vm.Name, vm.Spec.Action)
 		return
@@ -346,13 +367,16 @@ func (ctrl *VirtualMachineController) podWorker() {
 			glog.V(4).Infof("error getting name of vm %q to get vm from informer: %v", key, err)
 			return false
 		}
+
+		vmName := name[:strings.LastIndex(name, nameDelimiter)]
+
 		_, err = ctrl.podLister.Pods(ns).Get(name)
 		if err == nil {
-			glog.V(5).Infof("enqueued %q for sync", keyObj)
-			ctrl.vmQueue.Add(keyObj)
+			glog.V(5).Infof("enqueued vm %q for sync", vmName)
+			ctrl.vmQueue.Add(vmName)
 		} else if apierrors.IsNotFound(err) {
-			glog.V(5).Infof("enqueued %q for sync", keyObj)
-			ctrl.vmQueue.Add(keyObj)
+			glog.V(5).Infof("enqueued vm %q for sync", vmName)
+			ctrl.vmQueue.Add(vmName)
 		} else {
 			glog.Warningf("error getting pod %q from informer: %v", key, err)
 		}

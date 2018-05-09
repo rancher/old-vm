@@ -142,6 +142,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			makeEnvVar("MAC", vm.Status.MAC, nil),
 			makeEnvVar("INSTANCE_ID", vm.Status.ID, nil),
 			makeEnvVar("MIGRATE", strconv.FormatBool(migrate), nil),
+			makeEnvVar("MY_VM_NAME", vm.Name, nil),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			makeVolumeMount("vm-image", "/image", "", false),

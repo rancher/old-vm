@@ -278,8 +278,8 @@ CI_ISO=cidata.iso
 cat > $USER_DATA << EOF
 #cloud-config
 preserve_hostname: False
-hostname: $MY_POD_NAME.$MY_POD_NAMESPACE
-fqdn: $MY_POD_NAME.$MY_POD_NAMESPACE.local
+hostname: $MY_VM_NAME.$MY_POD_NAMESPACE
+fqdn: $MY_VM_NAME.$MY_POD_NAMESPACE.local
 output: 
   all: ">> /var/log/cloud-init.log"
 ssh_authorized_keys:
@@ -288,7 +288,7 @@ for i in $(seq 1 $PUBLIC_KEY_COUNT); do
   eval echo "  - \$PUBLIC_KEY_$i" >> $USER_DATA
 done
 
-echo "instance-id: $INSTANCE_ID; local-hostname: $MY_POD_NAME" > $META_DATA
+echo "instance-id: $INSTANCE_ID; local-hostname: $MY_VM_NAME" > $META_DATA
 
 # Create CD-ROM ISO with cloud-init config
 echo "$(date -R) Generating ISO for cloud-init..."

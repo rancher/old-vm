@@ -117,7 +117,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 				Command: []string{
 					"/bin/sh",
 					"-c",
-					"[ -S /vm/${MY_POD_NAMESPACE}_${MY_POD_NAME}.sock ]",
+					"[ -S /vm/${MY_POD_NAME}_vnc.sock ]",
 				},
 			},
 		},
@@ -247,7 +247,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 func newPodName(name string) string {
 	return strings.Join([]string{
 		name,
-		fmt.Sprintf("%04x", rand.Uint32()),
+		fmt.Sprintf("%08x", rand.Uint32()),
 	}, nameDelimiter)
 }
 

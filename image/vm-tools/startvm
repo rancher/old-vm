@@ -263,7 +263,7 @@ echo allow $bridge_iface > /etc/qemu/bridge.conf
 # If /vm does not exist, we still proceed with running KVM. We just
 # won't get a VNC console socket.
 if [ -d /vm ]; then
-  sockpath="/vm/${MY_POD_NAMESPACE}_${MY_POD_NAME}.sock"
+  sockpath="/vm/${MY_POD_NAME}_vnc.sock"
   VNC="-vnc unix:$sockpath"
   echo VNC server will listen on Unix socket $sockpath
 fi
@@ -304,7 +304,7 @@ exec $LAUNCHER qemu-system-x86_64 \
   -m size=$MEMORY_MB \
   -smp cpus=$CPUS \
   -cdrom $CI_ISO \
-  -qmp unix:/vm/monitor.sock,server,nowait \
+  -qmp unix:/vm/${MY_POD_NAME}_monitor.sock,server,nowait \
   $VNC \
   `eval echo $KVM_BLK_OPTS` \
   `eval echo $KVM_NET_OPTS` $KVM_ARGS

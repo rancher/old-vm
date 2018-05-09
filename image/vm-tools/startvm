@@ -36,7 +36,6 @@ gen_mac() {
 : ${MEMORY_MB:="128"}
 : ${CPUS:="1"}
 : ${MAC:=`gen_mac`}
-: ${MONITOR_PORT:=$(($RANDOM%32768+32768))}
 
 : ${KVM_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
 -device virtio-blk-pci,scsi=off,drive=drive-disk0,id=virtio-disk0,bootindex=1"}

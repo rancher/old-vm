@@ -10,6 +10,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const HostStateBaseDir = "/var/lib/rancher/vm"
+
 func makeEnvVar(name, value string, valueFrom *corev1.EnvVarSource) corev1.EnvVar {
 	return corev1.EnvVar{
 		Name:      name,
@@ -77,14 +79,12 @@ func makeVolumeMount(name, mountPath, subPath string, readOnly bool) corev1.Volu
 	}
 }
 
-const HostStateBaseDir = "/var/lib/rancher"
-
-func makeHostStateVol(vmNamespace, vmName, volName string) corev1.Volume {
+func makeHostStateVol(vmName, volName string) corev1.Volume {
 	return corev1.Volume{
 		Name: volName,
 		VolumeSource: corev1.VolumeSource{
 			HostPath: &corev1.HostPathVolumeSource{
-				Path: fmt.Sprintf("%s/%s_%s/%s", HostStateBaseDir, vmNamespace, vmName, volName),
+				Path: fmt.Sprintf("%s/%s/%s", HostStateBaseDir, vmName, volName),
 			},
 		},
 	}
@@ -190,15 +190,15 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 		},
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
-				makeHostStateVol(vm.Name, NamespaceVM, "vm-fs"),
-				makeHostStateVol(vm.Name, NamespaceVM, "vm-image"),
-				makeVolHostPath("vm-socket", "/tmp/rancher/vm-socks"),
+				makeHostStateVol(vm.Name, "vm-fs"),
+				makeHostStateVol(vm.Name, "vm-image"),
+				makeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", HostStateBaseDir, vm.Name)),
 				makeVolHostPath("dev-kvm", "/dev/kvm"),
 			},
 			InitContainers: []corev1.Container{
 				corev1.Container{
 					Name:            "debootstrap",
-					Image:           "rancher/vm-tools:0.0.1",
+					Image:           "rancher/vm-tools:0.0.2",
 					ImagePullPolicy: corev1.PullAlways,
 					VolumeMounts: []corev1.VolumeMount{
 						makeVolumeMount("vm-fs", "/vm-tools", "", false),
@@ -247,7 +247,7 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine) *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
-				makeVolHostPath("vm-socket", "/tmp/rancher/vm-socks"),
+				makeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", HostStateBaseDir, vm.Name)),
 				makeVolFieldPath("podinfo", "labels", "metadata.labels"),
 			},
 			Containers: []corev1.Container{

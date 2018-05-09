@@ -256,8 +256,18 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) {
 }
 
 func (ctrl *VirtualMachineController) deleteVmPod(ns, name string) error {
-	glog.V(2).Infof("trying to delete vm pod %s/%s", ns, name)
-	return ctrl.kubeClient.CoreV1().Pods(ns).Delete(name, &metav1.DeleteOptions{})
+	glog.V(2).Infof("trying to delete pods associated with vm %s/%s", ns, name)
+
+	vmPodSelector := labels.Set{"name": name}.AsSelector()
+
+	pods, _ := ctrl.podLister.Pods(NamespaceVM).List(vmPodSelector)
+	if len(pods) == 0 {
+		return apierrors.NewNotFound(corev1.Resource("pod"), name)
+	}
+
+	return ctrl.kubeClient.CoreV1().Pods(ns).DeleteCollection(&metav1.DeleteOptions{}, metav1.ListOptions{
+		LabelSelector: vmPodSelector.String(),
+	})
 }
 
 func (ctrl *VirtualMachineController) deleteVM(vm *vmapi.VirtualMachine) {
@@ -271,8 +281,11 @@ func (ctrl *VirtualMachineController) deleteVM(vm *vmapi.VirtualMachine) {
 	}
 
 	err1 := ctrl.deleteVmPod(NamespaceVM, vm.Name)
+	glog.Infof("Delete VM pod error: %v", err1)
 	err2 := ctrl.deleteNovncPod(NamespaceVM, vm.Name)
+	glog.Infof("Delete novnc pod error: %v", err2)
 	err3 := ctrl.deleteNovncService(NamespaceVM, vm.Name)
+	glog.Infof("Delete novnc svc error: %v", err3)
 
 	// TODO delete host path
 

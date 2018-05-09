@@ -85,8 +85,6 @@ func (ctrl *VirtualMachineController) deleteNovncPod(ns, name string) error {
 	case err == nil:
 		glog.V(2).Infof("trying to delete novnc pod %s/%s", ns, name)
 		return ctrl.kubeClient.CoreV1().Pods(ns).Delete(name+"-novnc", &metav1.DeleteOptions{})
-	case apierrors.IsNotFound(err):
-		return nil
 	default:
 		return err
 	}
@@ -98,8 +96,6 @@ func (ctrl *VirtualMachineController) deleteNovncService(ns, name string) error 
 	case err == nil:
 		glog.V(2).Infof("trying to delete novnc service %s/%s", ns, name)
 		return ctrl.kubeClient.CoreV1().Services(ns).Delete(name+"-novnc", &metav1.DeleteOptions{})
-	case apierrors.IsNotFound(err):
-		return nil
 	default:
 		return err
 	}

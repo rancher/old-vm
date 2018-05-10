@@ -3,19 +3,19 @@ package qemu
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/golang/glog"
 )
 
 func (c *MonitorClient) Migrate(uri string) error {
-	c.migrate(true, uri)
-	t := time.NewTicker(1 * time.Second)
+	c.migrate(uri)
 
+	start := time.Now()
+	t := time.NewTicker(1 * time.Second)
 	for _ = range t.C {
-		// Silently consume any events that may be written. We expect a STOP event
-		// Example:
-		// {"timestamp": {"seconds": 1525980624, "microseconds": 368241}, "event": "STOP"}
+		// Silently read any events that may be written. We expect a STOP event
 		c.readSilently()
 
 		reply := c.queryMigrate()
@@ -30,14 +30,29 @@ func (c *MonitorClient) Migrate(uri string) error {
 			return errors.New(fmt.Sprintf("Unrecognized reply: %v", reply))
 		}
 
+		elapsedTime := time.Now().Sub(start)
 		switch status {
 		case "failed":
 			return errors.New(fmt.Sprintf("Migration failed: %v", reply))
-		// TODO break once succeeded/failed
 		case "active":
-			// TODO display some nice metrics
-			// map[status:active setup-time:191 total-time:15002 ram:map[dirty-sync-count:1 transferred:4.9483918e+08 dirty-pages-rate:0 skipped:0 normal-bytes:4.93858816e+08 total:5.54508288e+08 mbps:176.694842 duplicate:1613 normal:120571 remaining:5.4038528e+07] expected-downtime:300]
+			ramMap, ok := replyMap["ram"].(map[string]interface{})
+			if !ok {
+				return errors.New(fmt.Sprintf("Unrecognized reply: %v", reply))
+			}
+
+			transferred := ramMap["transferred"].(float64)
+			total := ramMap["total"].(float64)
+			mbps := ramMap["mbps"].(float64)
+
+			remainingTime := time.Duration(math.MaxInt64)
+			if transferred > 0.0 {
+				// Instantaneous computation is good enuff
+				remainingTime = time.Duration(float64(elapsedTime)*total/transferred - float64(elapsedTime))
+			}
+			glog.Infof("status=%s\telapsed=%v\tremaining=%v\tmbps=%v", status, elapsedTime, remainingTime, mbps)
+
 		case "completed":
+			glog.Infof("status=%s total=%v", status, elapsedTime)
 			return nil
 		default:
 			continue

@@ -8,8 +8,8 @@ import (
 	"github.com/golang/glog"
 )
 
-func (c *MonitorClient) migrate(detach bool, uri string) {
-	cmd := monitorMakeCommandMigrate(detach, uri)
+func (c *MonitorClient) migrate(uri string) {
+	cmd := monitorMakeCommandMigrate(uri, true)
 	c.monitorExecCommand(cmd)
 }
 
@@ -23,10 +23,10 @@ func (c *MonitorClient) setCapabilities() {
 	c.monitorExecCommand(cmd)
 }
 
-func monitorMakeCommandMigrate(detach bool, uri string) []byte {
+func monitorMakeCommandMigrate(uri string, detach bool) []byte {
 	return monitorMakeCommand("migrate", map[string]interface{}{
-		"detach": detach,
 		"uri":    uri,
+		"detach": detach,
 	})
 }
 

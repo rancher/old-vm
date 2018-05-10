@@ -17,6 +17,7 @@ import (
 	"github.com/rancher/vm/pkg/client/informers/externalversions"
 	"github.com/rancher/vm/pkg/controller/ip"
 	"github.com/rancher/vm/pkg/controller/vm"
+	"github.com/rancher/vm/pkg/qemu"
 	"github.com/rancher/vm/pkg/server"
 )
 
@@ -39,7 +40,21 @@ func main() {
 	serv := flag.Bool("backend", false, "Run the REST server backend")
 	listenAddress := flag.String("listen-address", ":9500", "TCP network address that the REST server will listen on")
 
+	// migration flags
+	migrate := flag.Bool("migrate", false, "Run the VM migration job")
+	sockPath := flag.String("sock-path", "/var/lib/rancher/vm/zoo/zoo-26f1d7d2_monitor.sock", "Path to VM monitor Unix domain socket")
+	targetURI := flag.String("target-uri", "tcp:172.16.58.187:4444", "URI of the target VM to migrate to")
+
 	flag.Parse()
+
+	if *migrate {
+		c := qemu.NewMonitorClient(*sockPath)
+
+		if err := c.Migrate(*targetURI); err != nil {
+			panic(err)
+		}
+		return
+	}
 
 	config, err := NewKubeClientConfig(*kubeconfig)
 	if err != nil {

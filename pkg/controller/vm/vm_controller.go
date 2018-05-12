@@ -23,6 +23,7 @@ import (
 	vmclientset "github.com/rancher/vm/pkg/client/clientset/versioned"
 	vminformers "github.com/rancher/vm/pkg/client/informers/externalversions/virtualmachine/v1alpha1"
 	vmlisters "github.com/rancher/vm/pkg/client/listers/virtualmachine/v1alpha1"
+	"github.com/rancher/vm/pkg/common"
 )
 
 const FinalizerDeletion = "deletion.vm.rancher.com"
@@ -145,7 +146,9 @@ func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err
 	vm2.Status.State = vmapi.StatePending
 
 	pods, err := ctrl.podLister.Pods(NamespaceVM).List(labels.Set{
+		"app":  "ranchervm",
 		"name": vm.Name,
+		"role": "vm",
 	}.AsSelector())
 
 	// TODO this if/else statement needs simplifying
@@ -156,14 +159,9 @@ func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err
 		if pod.DeletionTimestamp != nil {
 			vm2.Status.State = vmapi.StateStopping
 		}
-		for _, c := range pod.Status.Conditions {
-			if c.Type != corev1.PodReady {
-				continue
-			}
-			// when pod ready is true, our readinessProbe succeeded
-			if c.Status == corev1.ConditionTrue {
-				vm2.Status.State = vmapi.StateRunning
-			}
+
+		if common.IsPodReady(pod) {
+			vm2.Status.State = vmapi.StateRunning
 		}
 	} else if err != nil && !apierrors.IsNotFound(err) {
 		glog.V(2).Infof("error getting vm pod(s) %s/%s: %v", NamespaceVM, vm.Name, err)
@@ -258,7 +256,9 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) {
 func (ctrl *VirtualMachineController) deleteVmPod(ns, name string) error {
 	glog.V(2).Infof("trying to delete pods associated with vm %s/%s", ns, name)
 
-	vmPodSelector := labels.Set{"name": name}.AsSelector()
+	vmPodSelector := labels.Set{
+		"name": name,
+	}.AsSelector()
 
 	pods, _ := ctrl.podLister.Pods(NamespaceVM).List(vmPodSelector)
 	if len(pods) == 0 {

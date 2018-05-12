@@ -10,6 +10,22 @@ const (
 	HostStateBaseDir = "/var/lib/rancher/vm"
 )
 
+// IsPodReady returns the PodReady condition status as a boolean
+func IsPodReady(pod *corev1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type != corev1.PodReady {
+			continue
+		}
+		switch cond.Status {
+		case corev1.ConditionTrue:
+			return true
+		default:
+			return false
+		}
+	}
+	return false
+}
+
 func MakeEnvVar(name, value string, valueFrom *corev1.EnvVarSource) corev1.EnvVar {
 	return corev1.EnvVar{
 		Name:      name,

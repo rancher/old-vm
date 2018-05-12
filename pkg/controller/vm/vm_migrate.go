@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
+	"github.com/rancher/vm/pkg/common"
 	"github.com/rancher/vm/pkg/qemu"
 )
 
@@ -36,7 +37,9 @@ func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) (err e
 func (ctrl *VirtualMachineController) startMigrationPod(vm *vmapi.VirtualMachine) (bool, *corev1.Pod, *corev1.Pod, error) {
 	// List all pods belonging to the VM
 	pods, err := ctrl.podLister.Pods(NamespaceVM).List(labels.Set{
+		"app":  "ranchervm",
 		"name": vm.Name,
+		"role": "vm",
 	}.AsSelector())
 
 	// If an error listing pods occurs, break out.
@@ -58,7 +61,7 @@ func (ctrl *VirtualMachineController) startMigrationPod(vm *vmapi.VirtualMachine
 	// state. Pod phase changes trigger requeueing, so this is safe.
 	case 2:
 		for _, pod := range pods {
-			if pod.Status.Phase != corev1.PodRunning {
+			if !common.IsPodReady(pod) {
 				return false, nil, nil, nil
 			}
 		}

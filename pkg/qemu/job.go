@@ -39,7 +39,7 @@ func NewMigrationJob(vm *v1alpha1.VirtualMachine, podName, targetURI string) *ba
 							Image:           VM_IMAGE,
 							ImagePullPolicy: corev1.PullAlways,
 							Command:         []string{"sh", "-c"},
-							Args:            []string{fmt.Sprintf("exec /ranchervm -migrate -sock-path /vm/%s_monitor.sock -target-uri %s -v 4", podName, targetURI)},
+							Args:            []string{fmt.Sprintf("exec /ranchervm -migrate -sock-path /vm/%s_monitor.sock -target-uri %s -v 5", podName, targetURI)},
 							VolumeMounts: []corev1.VolumeMount{
 								common.MakeVolumeMount("vm-socket", "/vm", "", false),
 							},

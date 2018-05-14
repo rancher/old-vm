@@ -111,7 +111,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			common.MakeEnvVar(fmt.Sprintf("PUBLIC_KEY_%d", i+1), publicKey.Spec.PublicKey, nil))
 	}
 
-	return &corev1.Pod{
+	vmPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: newPodName(vm.Name),
 			Labels: map[string]string{
@@ -166,6 +166,19 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			HostNetwork: true,
 		},
 	}
+
+	if migrate {
+		// TODO this could lead to port conflict in rare circumstance, find a
+		// better way. Possibly after MAC VLAN support we can run pod outside
+		// host network and use a service to target static migration port.
+		migratePort := strconv.Itoa(32768 + (rand.Int() % 32768))
+
+		migratePortVar := common.MakeEnvVar("MIGRATE_PORT", migratePort, nil)
+		vmPod.Spec.Containers[0].Env = append(vmPod.Spec.Containers[0].Env, migratePortVar)
+		vmPod.ObjectMeta.Annotations["migrate_port"] = migratePort
+	}
+
+	return vmPod
 }
 
 func newPodName(name string) string {

@@ -13,8 +13,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
+	batchinformers "k8s.io/client-go/informers/batch/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
+	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
@@ -37,6 +39,8 @@ type VirtualMachineController struct {
 	vmListerSynced   cache.InformerSynced
 	podLister        corelisters.PodLister
 	podListerSynced  cache.InformerSynced
+	jobLister        batchlisters.JobLister
+	jobListerSynced  cache.InformerSynced
 	svcLister        corelisters.ServiceLister
 	svcListerSynced  cache.InformerSynced
 	credLister       vmlisters.CredentialLister
@@ -58,6 +62,7 @@ func NewVirtualMachineController(
 	kubeClient kubernetes.Interface,
 	vmInformer vminformers.VirtualMachineInformer,
 	podInformer coreinformers.PodInformer,
+	jobInformer batchinformers.JobInformer,
 	svcInformer coreinformers.ServiceInformer,
 	credInformer vminformers.CredentialInformer,
 	bridgeIface string,
@@ -100,6 +105,9 @@ func NewVirtualMachineController(
 	ctrl.podLister = podInformer.Lister()
 	ctrl.podListerSynced = podInformer.Informer().HasSynced
 
+	ctrl.jobLister = jobInformer.Lister()
+	ctrl.jobListerSynced = jobInformer.Informer().HasSynced
+
 	ctrl.svcLister = svcInformer.Lister()
 	ctrl.svcListerSynced = svcInformer.Informer().HasSynced
 
@@ -115,7 +123,8 @@ func (ctrl *VirtualMachineController) Run(workers int, stopCh <-chan struct{}) {
 	glog.Infof("Starting vm controller")
 	defer glog.Infof("Shutting down vm Controller")
 
-	if !cache.WaitForCacheSync(stopCh, ctrl.vmListerSynced, ctrl.podListerSynced, ctrl.svcListerSynced, ctrl.credListerSynced) {
+	if !cache.WaitForCacheSync(stopCh, ctrl.vmListerSynced, ctrl.podListerSynced,
+		ctrl.jobListerSynced, ctrl.svcListerSynced, ctrl.credListerSynced) {
 		return
 	}
 
@@ -281,11 +290,8 @@ func (ctrl *VirtualMachineController) deleteVM(vm *vmapi.VirtualMachine) {
 	}
 
 	err1 := ctrl.deleteVmPod(NamespaceVM, vm.Name)
-	glog.Infof("Delete VM pod error: %v", err1)
 	err2 := ctrl.deleteNovncPod(NamespaceVM, vm.Name)
-	glog.Infof("Delete novnc pod error: %v", err2)
 	err3 := ctrl.deleteNovncService(NamespaceVM, vm.Name)
-	glog.Infof("Delete novnc svc error: %v", err3)
 
 	// TODO delete host path
 
@@ -389,9 +395,7 @@ func (ctrl *VirtualMachineController) podWorker() {
 func (ctrl *VirtualMachineController) podFilterFunc(obj interface{}) bool {
 	if pod, ok := obj.(*corev1.Pod); ok {
 		if app, ok := pod.Labels["app"]; ok && app == "ranchervm" {
-			if role, ok := pod.Labels["role"]; ok && role == "vm" {
-				return true
-			}
+			return true
 		}
 	}
 	return false

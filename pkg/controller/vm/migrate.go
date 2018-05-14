@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/golang/glog"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -14,7 +16,7 @@ import (
 	"github.com/rancher/vm/pkg/qemu"
 )
 
-func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) (err error) {
+func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) error {
 	// We currently only support live migration.
 	if vm.Status.State != vmapi.StateRunning {
 		return errors.New(fmt.Sprintf("Migration unimplemented for VM in %s state", vm.Status.State))
@@ -25,23 +27,22 @@ func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) (err e
 		return err
 	}
 
-	completed, err := ctrl.startMigrationJob(vm, oldPod, newPod)
-	if err != nil || !completed {
+	succeeded, migrateJob, err := ctrl.runMigrationJob(vm, oldPod, newPod)
+	if err != nil || !succeeded {
 		return err
 	}
 
-	if err := ctrl.migrationCleanup(vm, oldPod); err != nil {
+	if err := ctrl.migrationCleanup(vm, oldPod, migrateJob); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine, oldPod *corev1.Pod) error {
-	glog.V(5).Infof("migrationCleanup")
-
-	err := ctrl.kubeClient.BatchV1().Jobs(NamespaceVM).Delete(
-		fmt.Sprintf("%s-migrate", vm.Name), &metav1.DeleteOptions{})
+func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, migrateJob *batchv1.Job) error {
+	vm2 := vm.DeepCopy()
+	vm2.Spec.Action = vmapi.ActionStart
+	err := ctrl.updateVMSpec(vm, vm2)
 	if err != nil {
 		return err
 	}
@@ -51,11 +52,15 @@ func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine,
 		return err
 	}
 
+	err = ctrl.kubeClient.BatchV1().Jobs(NamespaceVM).Delete(migrateJob.Name, &metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMachine) (bool, *corev1.Pod, *corev1.Pod, error) {
-	glog.V(5).Infof("startMigrationTargetPod")
 
 	// List vm pods
 	pods, err := ctrl.podLister.Pods(NamespaceVM).List(labels.Set{
@@ -100,40 +105,22 @@ func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMac
 	return false, nil, nil, errors.New(fmt.Sprintf("strange number of vm pods found for %s: %d", vm.Name, len(pods)))
 }
 
-func (ctrl *VirtualMachineController) startMigrationJob(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, newPod *corev1.Pod) (bool, error) {
-	glog.V(5).Infof("startMigrationJob")
+func (ctrl *VirtualMachineController) runMigrationJob(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, newPod *corev1.Pod) (bool, *batchv1.Job, error) {
+	job, err := ctrl.jobLister.Jobs(NamespaceVM).Get(fmt.Sprintf("%s-migrate", vm.Name))
 
-	// List migration pods
-	pods, err := ctrl.podLister.Pods(NamespaceVM).List(labels.Set{
-		"app":  "ranchervm",
-		"name": vm.Name,
-		"role": "migrate",
-	}.AsSelector())
+	switch {
+	case err == nil:
+		return job.Status.Succeeded == 1, job, nil
 
-	if err != nil {
-		return false, err
+	case apierrors.IsNotFound(err):
+		migratePort, ok := newPod.ObjectMeta.Annotations["migrate_port"]
+		if !ok {
+			return false, nil, errors.New(fmt.Sprintf("Missing migrate_port annotation on migration pod for vm %s", vm.Name))
+		}
+		job := qemu.NewMigrationJob(vm, oldPod.Name, fmt.Sprintf("tcp:%s:%s", newPod.Status.PodIP, migratePort))
+		job, err = ctrl.kubeClient.BatchV1().Jobs(NamespaceVM).Create(job)
+		return false, job, err
 	}
 
-	switch len(pods) {
-	// If the migration job pod doesn't exist, start one.
-	case 0:
-		if migratePort, ok := newPod.ObjectMeta.Annotations["migrate_port"]; ok {
-			migrationJob := qemu.NewMigrationJob(vm, oldPod.Name, fmt.Sprintf("tcp:%s:%s", newPod.Status.PodIP, migratePort))
-			if _, err = ctrl.kubeClient.BatchV1().Jobs(NamespaceVM).Create(migrationJob); err != nil {
-				return false, err
-			}
-		} else {
-			return false, errors.New(fmt.Sprintf("Missing migrate_port annotation on migration pod for vm %s", vm.Name))
-		}
-
-	// Suspend migration procedure until migrate job pod enters completed state
-	case 1:
-		glog.Infof("phase: %+v", pods[0].Status.Phase)
-		if pods[0].Status.Phase != corev1.PodSucceeded {
-			return false, nil
-		}
-		return true, nil
-	}
-
-	return false, nil
+	return false, nil, errors.New(fmt.Sprintf("error getting job from lister for vm %s: %v", vm.Name, err))
 }

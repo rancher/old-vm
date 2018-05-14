@@ -77,6 +77,7 @@ func main() {
 			kubeClientset,
 			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
 			kubeInformerFactory.Core().V1().Pods(),
+			kubeInformerFactory.Batch().V1().Jobs(),
 			kubeInformerFactory.Core().V1().Services(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Credentials(),
 			*bridgeIface,

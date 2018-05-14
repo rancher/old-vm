@@ -46,16 +46,17 @@ func NewMigrationJob(vm *v1alpha1.VirtualMachine, podName, targetURI string) *ba
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyNever,
-					// The job needs to be co-located with the old/existing VM
+					// FIXME The job needs to be co-located with the old/existing VM
 					Affinity: &corev1.Affinity{
 						PodAffinity: &corev1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 								corev1.PodAffinityTerm{
 									LabelSelector: &metav1.LabelSelector{
 										MatchLabels: map[string]string{
-											"app":  "ranchervm",
-											"name": vm.Name,
-											"role": "vm",
+											"app":         "ranchervm",
+											"name":        vm.Name,
+											"unique_name": podName,
+											"role":        "vm",
 										},
 									},
 									TopologyKey: "kubernetes.io/hostname",

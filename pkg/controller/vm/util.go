@@ -111,13 +111,15 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			common.MakeEnvVar(fmt.Sprintf("PUBLIC_KEY_%d", i+1), publicKey.Spec.PublicKey, nil))
 	}
 
+	uniquePodName := newPodName(vm.Name)
 	vmPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: newPodName(vm.Name),
+			Name: uniquePodName,
 			Labels: map[string]string{
-				"app":  "ranchervm",
-				"name": vm.Name,
-				"role": "vm",
+				"app":         "ranchervm",
+				"name":        vm.Name,
+				"unique_name": uniquePodName,
+				"role":        "vm",
 			},
 			Annotations: map[string]string{
 				"cpus":      cpu,

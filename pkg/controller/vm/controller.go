@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,6 +49,7 @@ type VirtualMachineController struct {
 
 	vmQueue  workqueue.RateLimitingInterface
 	podQueue workqueue.RateLimitingInterface
+	jobQueue workqueue.RateLimitingInterface
 
 	bridgeIface      string
 	noResourceLimits bool
@@ -74,6 +76,7 @@ func NewVirtualMachineController(
 		kubeClient:       kubeClient,
 		vmQueue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtualmachine"),
 		podQueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "pod"),
+		jobQueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "job"),
 		bridgeIface:      bridgeIface,
 		noResourceLimits: noResourceLimits,
 	}
@@ -97,7 +100,16 @@ func NewVirtualMachineController(
 		},
 	)
 
-	// TODO handle service resource events
+	jobInformer.Informer().AddEventHandler(
+		cache.FilteringResourceEventHandler{
+			FilterFunc: ctrl.jobFilterFunc,
+			Handler: cache.ResourceEventHandlerFuncs{
+				AddFunc:    func(obj interface{}) { ctrl.enqueueWork(ctrl.jobQueue, obj) },
+				UpdateFunc: func(oldObj, newObj interface{}) { ctrl.enqueueWork(ctrl.jobQueue, newObj) },
+				DeleteFunc: func(obj interface{}) { ctrl.enqueueWork(ctrl.jobQueue, obj) },
+			},
+		},
+	)
 
 	ctrl.vmLister = vmInformer.Lister()
 	ctrl.vmListerSynced = vmInformer.Informer().HasSynced
@@ -132,6 +144,7 @@ func (ctrl *VirtualMachineController) Run(workers int, stopCh <-chan struct{}) {
 		go wait.Until(ctrl.vmWorker, time.Second, stopCh)
 	}
 	go wait.Until(ctrl.podWorker, time.Second, stopCh)
+	go wait.Until(ctrl.jobWorker, time.Second, stopCh)
 
 	<-stopCh
 }
@@ -163,7 +176,6 @@ func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err
 	// TODO this if/else statement needs simplifying
 	if err == nil && len(pods) == 1 {
 		pod := pods[0]
-		glog.V(2).Infof("Found existing vm pod %s/%s", pod.Namespace, pod.Name)
 		// TODO check the pod against the current spec and update, if necessary
 		if pod.DeletionTimestamp != nil {
 			vm2.Status.State = vmapi.StateStopping
@@ -173,10 +185,9 @@ func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err
 			vm2.Status.State = vmapi.StateRunning
 		}
 	} else if err != nil && !apierrors.IsNotFound(err) {
-		glog.V(2).Infof("error getting vm pod(s) %s/%s: %v", NamespaceVM, vm.Name, err)
+		glog.V(2).Infof("Error getting vm pod(s) %s/%s: %v", NamespaceVM, vm.Name, err)
 		return
 	} else if len(pods) > 1 {
-		glog.V(2).Infof("more than one vm pod detected %s/%s: %v", NamespaceVM, vm.Name, pods)
 		return
 	} else {
 		_, err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, false))
@@ -192,6 +203,14 @@ func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err
 
 func (ctrl *VirtualMachineController) updateVMStatus(current *vmapi.VirtualMachine, updated *vmapi.VirtualMachine) (err error) {
 	if !reflect.DeepEqual(current.Status, updated.Status) || !reflect.DeepEqual(current.Finalizers, updated.Finalizers) {
+		updated, err = ctrl.vmClient.VirtualmachineV1alpha1().VirtualMachines().Update(updated)
+	}
+	return
+}
+
+// This is typically discouraged but we allow it for migration
+func (ctrl *VirtualMachineController) updateVMSpec(current *vmapi.VirtualMachine, updated *vmapi.VirtualMachine) (err error) {
+	if !reflect.DeepEqual(current.Spec, updated.Spec) {
 		updated, err = ctrl.vmClient.VirtualmachineV1alpha1().VirtualMachines().Update(updated)
 	}
 	return
@@ -235,7 +254,7 @@ func (ctrl *VirtualMachineController) stopVM(vm *vmapi.VirtualMachine) (err erro
 	return
 }
 
-func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) {
+func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) error {
 	// set the instance id, mac address, finalizer if not present
 	if vm.Status.ID == "" || vm.Status.MAC == "" || len(vm.Finalizers) == 0 {
 		vm2 := vm.DeepCopy()
@@ -245,21 +264,24 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) {
 		vm2.Status.MAC = fmt.Sprintf("06:fe:%s:%s:%s:%s", uid[:2], uid[2:4], uid[4:6], uid[6:8])
 		ctrl.updateVMStatus(vm, vm2)
 		ctrl.updateVM(vm2)
-		return
+		return nil
 	}
 
 	// TODO requeue if an error is returned by start/stop/migrate
+	var err error
 	switch vm.Spec.Action {
 	case vmapi.ActionStart:
-		ctrl.startVM(vm)
+		err = ctrl.startVM(vm)
 	case vmapi.ActionStop:
-		ctrl.stopVM(vm)
+		err = ctrl.stopVM(vm)
 	case vmapi.ActionMigrate:
-		ctrl.migrateVM(vm)
+		err = ctrl.migrateVM(vm)
 	default:
 		glog.Warningf("detected vm %s/%s with invalid action \"%s\"", NamespaceVM, vm.Name, vm.Spec.Action)
-		return
+		// TODO change VM state to ERROR, return no error (don't requeue)
+		return nil
 	}
+	return err
 }
 
 func (ctrl *VirtualMachineController) deleteVmPod(ns, name string) error {
@@ -279,7 +301,7 @@ func (ctrl *VirtualMachineController) deleteVmPod(ns, name string) error {
 	})
 }
 
-func (ctrl *VirtualMachineController) deleteVM(vm *vmapi.VirtualMachine) {
+func (ctrl *VirtualMachineController) deleteVM(vm *vmapi.VirtualMachine) error {
 
 	// update status to terminating, if necessary
 	if vm.Status.State != vmapi.StateTerminating {
@@ -303,13 +325,11 @@ func (ctrl *VirtualMachineController) deleteVM(vm *vmapi.VirtualMachine) {
 		vm2 := vm.DeepCopy()
 		vm2.Finalizers = []string{}
 		if err := ctrl.updateVMStatus(vm, vm2); err == nil {
-			err = ctrl.vmClient.VirtualmachineV1alpha1().VirtualMachines().Delete(vm2.Name, &metav1.DeleteOptions{})
-			// } else {
-			// 	glog.V(5).Infof("requeued %q for sync", keyObj)
-			// 	ctrl.vmQueue.Add(keyObj)
-			// 	// requeue
+			return ctrl.vmClient.VirtualmachineV1alpha1().VirtualMachines().Delete(vm2.Name, &metav1.DeleteOptions{})
 		}
 	}
+
+	return nil
 }
 
 func (ctrl *VirtualMachineController) vmWorker() {
@@ -332,17 +352,24 @@ func (ctrl *VirtualMachineController) vmWorker() {
 		case err == nil:
 			switch vm.DeletionTimestamp {
 			case nil:
-				ctrl.updateVM(vm)
+				err = ctrl.updateVM(vm)
 			default:
-				ctrl.deleteVM(vm)
+				err = ctrl.deleteVM(vm)
 			}
+			if err != nil {
+				ctrl.vmQueue.Add(keyObj)
+				glog.V(5).Infof("re-enqueued %q for sync", keyObj)
+			}
+
 		case apierrors.IsNotFound(err):
 			break
+
 		default:
 			glog.V(2).Infof("error getting vm %q from informer: %v", key, err)
 			ctrl.vmQueue.Add(keyObj)
 			glog.V(5).Infof("re-enqueued %q for sync", keyObj)
 		}
+
 		return false
 	}
 	for {
@@ -365,7 +392,7 @@ func (ctrl *VirtualMachineController) podWorker() {
 
 		ns, name, err := cache.SplitMetaNamespaceKey(key)
 		if err != nil {
-			glog.V(4).Infof("error getting name of vm %q to get vm from informer: %v", key, err)
+			glog.V(4).Infof("error getting name of vm %q: %v", key, err)
 			return false
 		}
 
@@ -395,6 +422,45 @@ func (ctrl *VirtualMachineController) podWorker() {
 func (ctrl *VirtualMachineController) podFilterFunc(obj interface{}) bool {
 	if pod, ok := obj.(*corev1.Pod); ok {
 		if app, ok := pod.Labels["app"]; ok && app == "ranchervm" {
+			return true
+		}
+	}
+	return false
+}
+
+func (ctrl *VirtualMachineController) jobWorker() {
+	workFunc := func() bool {
+		keyObj, quit := ctrl.jobQueue.Get()
+		if quit {
+			return true
+		}
+		defer ctrl.jobQueue.Done(keyObj)
+		key := keyObj.(string)
+		glog.V(5).Infof("jobWorker[%s]", key)
+
+		_, name, err := cache.SplitMetaNamespaceKey(key)
+		if err != nil {
+			glog.V(4).Infof("error getting name of vm %q: %v", key, err)
+			return false
+		}
+
+		vmName := name[:strings.LastIndex(name, nameDelimiter)]
+		ctrl.vmQueue.Add(vmName)
+		glog.V(5).Infof("enqueued vm %q for sync", vmName)
+
+		return false
+	}
+	for {
+		if quit := workFunc(); quit {
+			glog.Infof("job worker queue shutting down")
+			return
+		}
+	}
+}
+
+func (ctrl *VirtualMachineController) jobFilterFunc(obj interface{}) bool {
+	if job, ok := obj.(*batchv1.Job); ok {
+		if app, ok := job.Labels["app"]; ok && app == "ranchervm" {
 			return true
 		}
 	}

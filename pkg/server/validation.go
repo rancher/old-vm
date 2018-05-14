@@ -14,7 +14,8 @@ var (
 func isValidAction(action vmapi.ActionType) bool {
 	return action == vmapi.ActionStart ||
 		action == vmapi.ActionStop ||
-		action == vmapi.ActionReboot
+		action == vmapi.ActionReboot ||
+		action == vmapi.ActionMigrate
 }
 
 func isValidNamespace(namespace string) bool {

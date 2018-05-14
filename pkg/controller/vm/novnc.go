@@ -22,10 +22,10 @@ func (ctrl *VirtualMachineController) updateNovnc(vm *vmapi.VirtualMachine) (err
 			glog.Warningf("error updating novnc service %s/%s: %v", NamespaceVM, vm.Name, err)
 		}
 	} else {
-		if err = ctrl.deleteNovncPod(NamespaceVM, vm.Name); err != nil {
+		if err = ctrl.deleteNovncPod(NamespaceVM, vm.Name); err != nil && !apierrors.IsNotFound(err) {
 			glog.Warningf("error deleting novnc pod %s/%s: %v", NamespaceVM, vm.Name, err)
 		}
-		if err = ctrl.deleteNovncService(NamespaceVM, vm.Name); err != nil {
+		if err = ctrl.deleteNovncService(NamespaceVM, vm.Name); err != nil && !apierrors.IsNotFound(err) {
 			glog.Warningf("error deleting novnc service %s/%s: %v", NamespaceVM, vm.Name, err)
 		}
 		vm2 := vm.DeepCopy()

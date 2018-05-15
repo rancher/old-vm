@@ -76,6 +76,7 @@ func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMac
 		"name": vm.Name,
 		"role": "vm",
 	}.AsSelector())
+	glog.V(4).Infof("Found %d pods for vm %s, error %v", len(pods), vm.Name, err)
 
 	if err != nil {
 		return false, nil, nil, err
@@ -84,12 +85,16 @@ func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMac
 	switch len(pods) {
 	// If the second pod doesn't already exist, start one.
 	case 1:
-		_, err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, true))
-		if err != nil {
-			glog.V(2).Infof("Error creating vm pod %s/%s: %v", NamespaceVM, vm.Name, err)
-			return false, nil, nil, err
+		var getErr, createErr error
+		pod := ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, true)
+		pod, createErr = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(pod)
+		if createErr != nil {
+			glog.V(2).Infof("Error creating vm pod %s/%s: %v", NamespaceVM, vm.Name, createErr)
+			return false, nil, nil, createErr
 		}
-		return false, nil, nil, nil
+		// Get the created pod into cache for the next poll
+		pod, getErr = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Get(pod.Name, metav1.GetOptions{})
+		return false, nil, nil, getErr
 
 	// Suspend the migration procedure until both pods enter running
 	// state. Pod phase changes trigger requeueing, so this is safe.

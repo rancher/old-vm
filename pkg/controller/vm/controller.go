@@ -159,44 +159,44 @@ func (ctrl *VirtualMachineController) enqueueWork(queue workqueue.Interface, obj
 		glog.Errorf("failed to get key from object: %v", err)
 		return
 	}
-	glog.V(5).Infof("enqueued %q for sync", objName)
 	queue.Add(objName)
 }
 
 func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (pod *corev1.Pod, err error) {
-	vm2 := vm.DeepCopy()
-	vm2.Status.State = vmapi.StatePending
-
 	pods, err := ctrl.podLister.Pods(NamespaceVM).List(labels.Set{
 		"app":  "ranchervm",
 		"name": vm.Name,
 		"role": "vm",
 	}.AsSelector())
 
-	// TODO this if/else statement needs simplifying
-	if err == nil && len(pods) == 1 {
-		pod = pods[0]
-		// TODO check the pod against the current spec and update, if necessary
-		if pod.DeletionTimestamp != nil {
-			vm2.Status.State = vmapi.StateStopping
-		}
-
-		if common.IsPodReady(pod) {
-			vm2.Status.State = vmapi.StateRunning
-		}
-	} else if err != nil && !apierrors.IsNotFound(err) {
+	if err != nil && !apierrors.IsNotFound(err) {
 		glog.V(2).Infof("Error getting vm pod(s) %s/%s: %v", NamespaceVM, vm.Name, err)
 		return
-	} else if len(pods) > 1 {
-		return
-	} else {
-		_, err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, false))
+	}
+
+	switch len(pods) {
+	case 0:
+		pod = ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, false)
+		pod, err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(pod)
 		if err != nil {
 			glog.V(2).Infof("Error creating vm pod %s/%s: %v", NamespaceVM, vm.Name, err)
 			return
 		}
+	case 1:
+		pod = pods[0]
+	default:
+		return
 	}
 
+	vm2 := vm.DeepCopy()
+	switch {
+	case pod.DeletionTimestamp != nil:
+		vm2.Status.State = vmapi.StateStopping
+	case common.IsPodReady(pod):
+		vm2.Status.State = vmapi.StateRunning
+	default:
+		vm2.Status.State = vmapi.StatePending
+	}
 	err = ctrl.updateVMStatus(vm, vm2)
 	return
 }
@@ -355,8 +355,8 @@ func (ctrl *VirtualMachineController) vmWorker() {
 				err = ctrl.deleteVM(vm)
 			}
 			if err != nil {
-				ctrl.vmQueue.Add(keyObj)
-				glog.V(5).Infof("re-enqueued %q for sync", keyObj)
+				ctrl.vmQueue.AddRateLimited(keyObj)
+				glog.V(5).Infof("error %v, re-enqueued %q for sync", err, keyObj)
 			}
 
 		case apierrors.IsNotFound(err):
@@ -364,7 +364,7 @@ func (ctrl *VirtualMachineController) vmWorker() {
 
 		default:
 			glog.V(2).Infof("error getting vm %q from informer: %v", key, err)
-			ctrl.vmQueue.Add(keyObj)
+			ctrl.vmQueue.AddRateLimited(keyObj)
 			glog.V(5).Infof("re-enqueued %q for sync", keyObj)
 		}
 
@@ -420,7 +420,10 @@ func (ctrl *VirtualMachineController) podWorker() {
 func (ctrl *VirtualMachineController) podFilterFunc(obj interface{}) bool {
 	if pod, ok := obj.(*corev1.Pod); ok {
 		if app, ok := pod.Labels["app"]; ok && app == "ranchervm" {
-			return true
+			// look at job events instead for migration pod events
+			if role, ok := pod.Labels["role"]; ok && role != "migrate" {
+				return true
+			}
 		}
 	}
 	return false

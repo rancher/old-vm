@@ -13,9 +13,9 @@ import (
 // FIXME shouldn't be hardcoded
 const NODE_HOSTNAME = "kvm.local"
 
-func (ctrl *VirtualMachineController) updateNovnc(vm *vmapi.VirtualMachine) (err error) {
+func (ctrl *VirtualMachineController) updateNovnc(vm *vmapi.VirtualMachine, podName string) (err error) {
 	if vm.Spec.HostedNovnc {
-		if err = ctrl.updateNovncPod(vm); err != nil {
+		if err = ctrl.updateNovncPod(vm, podName); err != nil {
 			glog.Warningf("error updating novnc pod %s/%s: %v", NamespaceVM, vm.Name, err)
 		}
 		if err = ctrl.updateNovncService(vm); err != nil {
@@ -37,7 +37,7 @@ func (ctrl *VirtualMachineController) updateNovnc(vm *vmapi.VirtualMachine) (err
 	return
 }
 
-func (ctrl *VirtualMachineController) updateNovncPod(vm *vmapi.VirtualMachine) (err error) {
+func (ctrl *VirtualMachineController) updateNovncPod(vm *vmapi.VirtualMachine, podName string) (err error) {
 	pod, err := ctrl.podLister.Pods(NamespaceVM).Get(vm.Name + "-novnc")
 	switch {
 	case err == nil:
@@ -46,7 +46,7 @@ func (ctrl *VirtualMachineController) updateNovncPod(vm *vmapi.VirtualMachine) (
 		glog.V(2).Infof("error getting novnc pod %s/%s: %v", NamespaceVM, vm.Name, err)
 		return
 	default:
-		_, err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(makeNovncPod(vm))
+		_, err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(makeNovncPod(vm, podName))
 		if err != nil {
 			glog.V(2).Infof("Error creating novnc pod %s/%s: %v", NamespaceVM, vm.Name, err)
 			return

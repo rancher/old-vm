@@ -64,6 +64,8 @@ const (
 	// StateTerminated indicates the VM is deleted. The Root block device
 	// belonging to the VM may or may not be deleted.
 	StateTerminated StateType = "terminated"
+	// StateMigrating indicates the VM is migrating to a new node
+	StateMigrating StateType = "migrating"
 	// StateError indicates something went horribly wrong and we are not sure
 	// how to proceed
 	StateError StateType = "error"

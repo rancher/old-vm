@@ -212,7 +212,7 @@ func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {
 	}
 }
 
-func makeNovncPod(vm *v1alpha1.VirtualMachine) *corev1.Pod {
+func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: vm.Name + "-novnc",
@@ -233,11 +233,27 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine) *corev1.Pod {
 					Image:   "rancher/novnc:0.0.1",
 					Command: []string{"novnc"},
 					Env: []corev1.EnvVar{
-						common.MakeEnvVarFieldPath("MY_POD_NAMESPACE", "metadata.namespace"),
+						common.MakeEnvVar("VM_POD_NAME", podName, nil),
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						common.MakeVolumeMount("vm-socket", "/vm", "", false),
 						common.MakeVolumeMount("podinfo", "/podinfo", "", false),
+					},
+				},
+			},
+			Affinity: &corev1.Affinity{
+				PodAffinity: &corev1.PodAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+						corev1.PodAffinityTerm{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app":  "ranchervm",
+									"name": vm.Name,
+									"role": "vm",
+								},
+							},
+							TopologyKey: "kubernetes.io/hostname",
+						},
 					},
 				},
 			},

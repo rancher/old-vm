@@ -163,7 +163,7 @@ func (ctrl *VirtualMachineController) enqueueWork(queue workqueue.Interface, obj
 	queue.Add(objName)
 }
 
-func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err error) {
+func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (pod *corev1.Pod, err error) {
 	vm2 := vm.DeepCopy()
 	vm2.Status.State = vmapi.StatePending
 
@@ -175,7 +175,7 @@ func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err
 
 	// TODO this if/else statement needs simplifying
 	if err == nil && len(pods) == 1 {
-		pod := pods[0]
+		pod = pods[0]
 		// TODO check the pod against the current spec and update, if necessary
 		if pod.DeletionTimestamp != nil {
 			vm2.Status.State = vmapi.StateStopping
@@ -202,27 +202,25 @@ func (ctrl *VirtualMachineController) updateVmPod(vm *vmapi.VirtualMachine) (err
 }
 
 func (ctrl *VirtualMachineController) updateVMStatus(current *vmapi.VirtualMachine, updated *vmapi.VirtualMachine) (err error) {
-	if !reflect.DeepEqual(current.Status, updated.Status) || !reflect.DeepEqual(current.Finalizers, updated.Finalizers) {
-		updated, err = ctrl.vmClient.VirtualmachineV1alpha1().VirtualMachines().Update(updated)
-	}
-	return
-}
-
-// This is typically discouraged but we allow it for migration
-func (ctrl *VirtualMachineController) updateVMSpec(current *vmapi.VirtualMachine, updated *vmapi.VirtualMachine) (err error) {
-	if !reflect.DeepEqual(current.Spec, updated.Spec) {
+	if !reflect.DeepEqual(current.Status, updated.Status) ||
+		!reflect.DeepEqual(current.Finalizers, updated.Finalizers) ||
+		!reflect.DeepEqual(current.Spec, updated.Spec) {
 		updated, err = ctrl.vmClient.VirtualmachineV1alpha1().VirtualMachines().Update(updated)
 	}
 	return
 }
 
 func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) (err error) {
-	if err = ctrl.updateVmPod(vm); err != nil {
+	pod, err := ctrl.updateVMPod(vm)
+	if err != nil {
 		glog.Warningf("error updating vm pod %s/%s: %v", NamespaceVM, vm.Name, err)
+		return
 	}
 
-	if err = ctrl.updateNovnc(vm); err != nil {
-		glog.Warningf("error updating novnc %s/%s: %v", NamespaceVM, vm.Name, err)
+	if pod != nil && pod.Name != "" {
+		if err = ctrl.updateNovnc(vm, pod.Name); err != nil {
+			glog.Warningf("error updating novnc %s/%s: %v", NamespaceVM, vm.Name, err)
+		}
 	}
 
 	return

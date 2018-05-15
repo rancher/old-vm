@@ -17,8 +17,15 @@ import (
 )
 
 func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) error {
-	// We currently only support live migration.
-	if vm.Status.State != vmapi.StateRunning {
+	switch vm.Status.State {
+	case vmapi.StateRunning:
+		vm2 := vm.DeepCopy()
+		vm2.Status.State = vmapi.StateMigrating
+		ctrl.updateVMStatus(vm, vm2)
+		ctrl.migrateVM(vm2)
+	case vmapi.StateMigrating:
+		break
+	default:
 		return errors.New(fmt.Sprintf("Migration unimplemented for VM in %s state", vm.Status.State))
 	}
 
@@ -42,7 +49,8 @@ func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) error 
 func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, migrateJob *batchv1.Job) error {
 	vm2 := vm.DeepCopy()
 	vm2.Spec.Action = vmapi.ActionStart
-	err := ctrl.updateVMSpec(vm, vm2)
+	vm2.Status.State = vmapi.StateRunning
+	err := ctrl.updateVMStatus(vm, vm2)
 	if err != nil {
 		return err
 	}

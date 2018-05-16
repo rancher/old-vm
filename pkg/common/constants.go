@@ -5,11 +5,12 @@ const (
 
 	FinalizerDeletion = "deletion.vm.rancher.com"
 	NamespaceVM       = "default"
+	NameDelimiter     = "-"
 
 	ImageVM       = "rancher/vm"
 	ImageVMPrefix = "rancher/vm-%s"
-	ImageVMTools  = "rancher/vm-tools:0.0.3"
-	ImageNoVNC    = "rancher/novnc:0.0.1"
+	ImageVMTools  = "rancher/vm-tools"
+	ImageNoVNC    = "rancher/novnc"
 
 	RancherOUI = "06:fe"
 

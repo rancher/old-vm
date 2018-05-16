@@ -14,10 +14,6 @@ import (
 	"github.com/rancher/vm/pkg/common"
 )
 
-const (
-	nameDelimiter = "-"
-)
-
 var privileged = true
 
 func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {
@@ -188,7 +184,7 @@ func newPodName(name string) string {
 	return strings.Join([]string{
 		name,
 		fmt.Sprintf("%08x", rand.Uint32()),
-	}, nameDelimiter)
+	}, common.NameDelimiter)
 }
 
 func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {

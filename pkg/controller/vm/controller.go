@@ -400,7 +400,7 @@ func (ctrl *VirtualMachineController) podWorker() {
 			return false
 		}
 
-		vmName := name[:strings.LastIndex(name, nameDelimiter)]
+		vmName := name[:strings.LastIndex(name, common.NameDelimiter)]
 
 		_, err = ctrl.podLister.Pods(ns).Get(name)
 		if err == nil {
@@ -451,7 +451,7 @@ func (ctrl *VirtualMachineController) jobWorker() {
 			return false
 		}
 
-		vmName := name[:strings.LastIndex(name, nameDelimiter)]
+		vmName := name[:strings.LastIndex(name, common.NameDelimiter)]
 		ctrl.vmQueue.Add(vmName)
 		glog.V(5).Infof("enqueued vm %q for sync", vmName)
 

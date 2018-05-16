@@ -329,6 +329,10 @@ func (s *server) InstanceActionMulti(w http.ResponseWriter, r *http.Request) {
 			// In multi scenario we behave idempotently
 			continue
 		}
+		// migration requires vm in a running phase
+		if vm2.Spec.Action == vmapi.ActionMigrate && vm2.Status.State != vmapi.StateRunning {
+			continue
+		}
 
 		if vm2, err = s.vmClient.VirtualmachineV1alpha1().VirtualMachines().Update(vm2); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)

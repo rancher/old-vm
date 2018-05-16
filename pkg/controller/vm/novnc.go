@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
+	"github.com/rancher/vm/pkg/common"
 )
 
 // FIXME shouldn't be hardcoded

@@ -39,29 +39,25 @@ func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) error 
 		return err
 	}
 
-	if err := ctrl.migrationCleanup(vm, oldPod, migrateJob); err != nil {
+	if err := ctrl.migrationCleanup(vm, oldPod, newPod, migrateJob); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, migrateJob *batchv1.Job) error {
+func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, newPod *corev1.Pod, migrateJob *batchv1.Job) error {
 	vm2 := vm.DeepCopy()
 	vm2.Spec.Action = vmapi.ActionStart
-	vm2.Status.State = vmapi.StateRunning
-	err := ctrl.updateVMStatus(vm, vm2)
-	if err != nil {
+	if err := ctrl.updateVMStatusWithPod(vm, vm2, newPod); err != nil {
 		return err
 	}
 
-	err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Delete(oldPod.Name, &metav1.DeleteOptions{})
-	if err != nil {
+	if err := ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Delete(oldPod.Name, &metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
-	err = ctrl.kubeClient.BatchV1().Jobs(common.NamespaceVM).Delete(migrateJob.Name, &metav1.DeleteOptions{})
-	if err != nil {
+	if err := ctrl.kubeClient.BatchV1().Jobs(common.NamespaceVM).Delete(migrateJob.Name, &metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 

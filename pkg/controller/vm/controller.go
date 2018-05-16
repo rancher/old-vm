@@ -185,7 +185,14 @@ func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (pod
 		return
 	}
 
-	vm2 := vm.DeepCopy()
+	err = ctrl.updateVMStatusWithPod(vm, vm.DeepCopy(), pod)
+	return
+}
+
+func (ctrl *VirtualMachineController) updateVMStatusWithPod(vm *vmapi.VirtualMachine, vm2 *vmapi.VirtualMachine, pod *corev1.Pod) error {
+	if pod.Spec.NodeName != "" {
+		vm2.Status.NodeName = pod.Spec.NodeName
+	}
 	switch {
 	case pod.DeletionTimestamp != nil:
 		vm2.Status.State = vmapi.StateStopping
@@ -194,8 +201,7 @@ func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (pod
 	default:
 		vm2.Status.State = vmapi.StatePending
 	}
-	err = ctrl.updateVMStatus(vm, vm2)
-	return
+	return ctrl.updateVMStatus(vm, vm2)
 }
 
 func (ctrl *VirtualMachineController) updateVMStatus(current *vmapi.VirtualMachine, updated *vmapi.VirtualMachine) (err error) {
@@ -256,7 +262,7 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) error {
 		uid := string(vm.UID)
 		vm2.Finalizers = append(vm2.Finalizers, common.FinalizerDeletion)
 		vm2.Status.ID = fmt.Sprintf("i-%s", uid[:8])
-		vm2.Status.MAC = fmt.Sprintf("%s:%s:%s:%s:%s", RancherOUI, uid[:2], uid[2:4], uid[4:6], uid[6:8])
+		vm2.Status.MAC = fmt.Sprintf("%s:%s:%s:%s:%s", common.RancherOUI, uid[:2], uid[2:4], uid[4:6], uid[6:8])
 		ctrl.updateVMStatus(vm, vm2)
 		ctrl.updateVM(vm2)
 		return nil

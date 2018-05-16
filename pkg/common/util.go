@@ -6,10 +6,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const (
-	HostStateBaseDir = "/var/lib/rancher/vm"
-)
-
 // IsPodReady returns the PodReady condition status as a boolean
 func IsPodReady(pod *corev1.Pod) bool {
 	for _, cond := range pod.Status.Conditions {

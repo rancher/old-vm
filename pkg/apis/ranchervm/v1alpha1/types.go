@@ -85,6 +85,8 @@ type VirtualMachineStatus struct {
 	MAC string `json:"mac"`
 	// IP address assigned to the guest NIC
 	IP string `json:"ip"`
+	// NodeName is the name of the node where the virtual machine is running
+	NodeName string `json:"node_name"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

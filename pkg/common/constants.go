@@ -1,6 +1,8 @@
 package common
 
 const (
+	HostStateBaseDir = "/var/lib/rancher/vm"
+
 	FinalizerDeletion = "deletion.vm.rancher.com"
 	NamespaceVM       = "default"
 

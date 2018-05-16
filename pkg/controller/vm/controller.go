@@ -161,9 +161,9 @@ func (ctrl *VirtualMachineController) enqueueWork(queue workqueue.Interface, obj
 
 func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (pod *corev1.Pod, err error) {
 	pods, err := ctrl.podLister.Pods(common.NamespaceVM).List(labels.Set{
-		"app":  "ranchervm",
+		"app":  common.LabelApp,
 		"name": vm.Name,
-		"role": "vm",
+		"role": common.LabelRoleVM,
 	}.AsSelector())
 
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -192,6 +192,9 @@ func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (pod
 func (ctrl *VirtualMachineController) updateVMStatusWithPod(vm *vmapi.VirtualMachine, vm2 *vmapi.VirtualMachine, pod *corev1.Pod) error {
 	if pod.Spec.NodeName != "" {
 		vm2.Status.NodeName = pod.Spec.NodeName
+	}
+	if pod.Status.HostIP != "" {
+		vm2.Status.NodeIP = pod.Status.HostIP
 	}
 	switch {
 	case pod.DeletionTimestamp != nil:
@@ -231,7 +234,7 @@ func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) (err err
 
 func (ctrl *VirtualMachineController) stopVM(vm *vmapi.VirtualMachine) (err error) {
 	vm2 := vm.DeepCopy()
-	err = ctrl.deleteVmPod(common.NamespaceVM, vm.Name)
+	err = ctrl.deleteVmPod(vm.Name)
 	switch {
 	case err == nil:
 		vm2.Status.State = vmapi.StateStopping
@@ -241,7 +244,7 @@ func (ctrl *VirtualMachineController) stopVM(vm *vmapi.VirtualMachine) (err erro
 		vm2.Status.State = vmapi.StateError
 	}
 
-	err = ctrl.deleteNovncPod(common.NamespaceVM, vm.Name)
+	err = ctrl.deleteNovncPod(vm.Name)
 	switch {
 	case err == nil:
 		// if either the vm or novnc pod had to be deleted, we are stopping
@@ -285,8 +288,8 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) error {
 	return err
 }
 
-func (ctrl *VirtualMachineController) deleteVmPod(ns, name string) error {
-	glog.V(2).Infof("trying to delete pods associated with vm %s/%s", ns, name)
+func (ctrl *VirtualMachineController) deleteVmPod(name string) error {
+	glog.V(2).Infof("trying to delete pods associated with vm %s", name)
 
 	vmPodSelector := labels.Set{
 		"name": name,
@@ -297,7 +300,7 @@ func (ctrl *VirtualMachineController) deleteVmPod(ns, name string) error {
 		return apierrors.NewNotFound(corev1.Resource("pod"), name)
 	}
 
-	return ctrl.kubeClient.CoreV1().Pods(ns).DeleteCollection(&metav1.DeleteOptions{}, metav1.ListOptions{
+	return ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).DeleteCollection(&metav1.DeleteOptions{}, metav1.ListOptions{
 		LabelSelector: vmPodSelector.String(),
 	})
 }
@@ -312,9 +315,9 @@ func (ctrl *VirtualMachineController) deleteVM(vm *vmapi.VirtualMachine) error {
 		vm = vm2
 	}
 
-	err1 := ctrl.deleteVmPod(common.NamespaceVM, vm.Name)
-	err2 := ctrl.deleteNovncPod(common.NamespaceVM, vm.Name)
-	err3 := ctrl.deleteNovncService(common.NamespaceVM, vm.Name)
+	err1 := ctrl.deleteVmPod(vm.Name)
+	err2 := ctrl.deleteNovncPod(vm.Name)
+	err3 := ctrl.deleteNovncService(vm.Name)
 
 	// TODO delete host path
 
@@ -422,9 +425,9 @@ func (ctrl *VirtualMachineController) podWorker() {
 
 func (ctrl *VirtualMachineController) podFilterFunc(obj interface{}) bool {
 	if pod, ok := obj.(*corev1.Pod); ok {
-		if app, ok := pod.Labels["app"]; ok && app == "ranchervm" {
+		if app, ok := pod.Labels["app"]; ok && app == common.LabelApp {
 			// look at job events instead for migration pod events
-			if role, ok := pod.Labels["role"]; ok && role != "migrate" {
+			if role, ok := pod.Labels["role"]; ok && role != common.LabelRoleMigrate {
 				return true
 			}
 		}
@@ -464,7 +467,7 @@ func (ctrl *VirtualMachineController) jobWorker() {
 
 func (ctrl *VirtualMachineController) jobFilterFunc(obj interface{}) bool {
 	if job, ok := obj.(*batchv1.Job); ok {
-		if app, ok := job.Labels["app"]; ok && app == "ranchervm" {
+		if app, ok := job.Labels["app"]; ok && app == common.LabelApp {
 			return true
 		}
 	}

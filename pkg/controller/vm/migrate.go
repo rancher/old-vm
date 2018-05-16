@@ -64,16 +64,17 @@ func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine,
 		return err
 	}
 
-	return nil
+	// novnc pod needs to move at this point to read from unix socket on different host
+	return ctrl.deleteNovncPod(vm.Name)
 }
 
 func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMachine) (bool, *corev1.Pod, *corev1.Pod, error) {
 
 	// List vm pods
 	pods, err := ctrl.podLister.Pods(common.NamespaceVM).List(labels.Set{
-		"app":  "ranchervm",
+		"app":  common.LabelApp,
 		"name": vm.Name,
-		"role": "vm",
+		"role": common.LabelRoleVM,
 	}.AsSelector())
 
 	if err != nil {

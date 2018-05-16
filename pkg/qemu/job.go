@@ -11,16 +11,13 @@ import (
 	"github.com/rancher/vm/pkg/common"
 )
 
-const VM_IMAGE = "llparse/vm:dev"
-
-// TODO we need the URI and pod name
 func NewMigrationJob(vm *v1alpha1.VirtualMachine, podName, targetURI string) *batchv1.Job {
 	objectMeta := metav1.ObjectMeta{
 		Name: fmt.Sprintf("%s-migrate", vm.Name),
 		Labels: map[string]string{
-			"app":  "ranchervm",
+			"app":  common.LabelApp,
 			"name": vm.Name,
-			"role": "migrate",
+			"role": common.LabelRoleMigrate,
 		},
 	}
 
@@ -35,8 +32,8 @@ func NewMigrationJob(vm *v1alpha1.VirtualMachine, podName, targetURI string) *ba
 					},
 					Containers: []corev1.Container{
 						corev1.Container{
-							Name:            "migrate",
-							Image:           VM_IMAGE,
+							Name:            common.LabelRoleMigrate,
+							Image:           common.ImageVM,
 							ImagePullPolicy: corev1.PullAlways,
 							Command:         []string{"sh", "-c"},
 							Args:            []string{fmt.Sprintf("exec /ranchervm -migrate -sock-path /vm/%s_monitor.sock -target-uri %s -v 5", podName, targetURI)},
@@ -46,17 +43,16 @@ func NewMigrationJob(vm *v1alpha1.VirtualMachine, podName, targetURI string) *ba
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyNever,
-					// FIXME The job needs to be co-located with the old/existing VM
 					Affinity: &corev1.Affinity{
 						PodAffinity: &corev1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 								corev1.PodAffinityTerm{
 									LabelSelector: &metav1.LabelSelector{
 										MatchLabels: map[string]string{
-											"app":         "ranchervm",
+											"app":         common.LabelApp,
 											"name":        vm.Name,
 											"unique_name": podName,
-											"role":        "vm",
+											"role":        common.LabelRoleVM,
 										},
 									},
 									TopologyKey: "kubernetes.io/hostname",

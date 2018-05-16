@@ -87,6 +87,8 @@ type VirtualMachineStatus struct {
 	IP string `json:"ip"`
 	// NodeName is the name of the node where the virtual machine is running
 	NodeName string `json:"node_name"`
+	// NodeIP is the IP address of the node where the virtual machine is running
+	NodeIP string `json:"node_ip"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

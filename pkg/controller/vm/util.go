@@ -52,7 +52,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 	}
 
 	vmContainer := corev1.Container{
-		Name:            "vm",
+		Name:            common.LabelRoleVM,
 		Image:           fmt.Sprintf(common.ImageVMPrefix, string(vm.Spec.MachineImage)),
 		ImagePullPolicy: corev1.PullAlways,
 		Command:         []string{"/usr/bin/startvm"},
@@ -114,12 +114,13 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 	uniquePodName := newPodName(vm.Name)
 	vmPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
+			// TODO: use GenerateName, find alternative to selector on unique_name
 			Name: uniquePodName,
 			Labels: map[string]string{
-				"app":         "ranchervm",
+				"app":         common.LabelApp,
 				"name":        vm.Name,
 				"unique_name": uniquePodName,
-				"role":        "vm",
+				"role":        common.LabelRoleVM,
 			},
 			Annotations: map[string]string{
 				"cpus":      cpu,
@@ -155,9 +156,9 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 						corev1.PodAffinityTerm{
 							LabelSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"app":  "ranchervm",
+									"app":  common.LabelApp,
 									"name": vm.Name,
-									"role": "vm",
+									"role": common.LabelRoleVM,
 								},
 							},
 							TopologyKey: "kubernetes.io/hostname",
@@ -203,9 +204,9 @@ func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"app":  "ranchervm",
+				"app":  common.LabelApp,
 				"name": vm.Name,
-				"role": "novnc",
+				"role": common.LabelRoleNoVNC,
 			},
 			Type: corev1.ServiceTypeNodePort,
 		},
@@ -217,9 +218,9 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: vm.Name + "-novnc",
 			Labels: map[string]string{
-				"app":  "ranchervm",
+				"app":  common.LabelApp,
 				"name": vm.Name,
-				"role": "novnc",
+				"role": common.LabelRoleNoVNC,
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -229,7 +230,7 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 			},
 			Containers: []corev1.Container{
 				corev1.Container{
-					Name:            "novnc",
+					Name:            common.LabelRoleNoVNC,
 					Image:           common.ImageNoVNC,
 					ImagePullPolicy: corev1.PullAlways,
 					Command:         []string{"novnc"},
@@ -248,9 +249,9 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 						corev1.PodAffinityTerm{
 							LabelSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"app":  "ranchervm",
+									"app":  common.LabelApp,
 									"name": vm.Name,
-									"role": "vm",
+									"role": common.LabelRoleVM,
 								},
 							},
 							TopologyKey: "kubernetes.io/hostname",

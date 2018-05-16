@@ -6,9 +6,15 @@ const (
 	FinalizerDeletion = "deletion.vm.rancher.com"
 	NamespaceVM       = "default"
 
-	ImageNoVNC    = "rancher/novnc:0.0.1"
-	ImageVMTools  = "rancher/vm-tools:0.0.3"
+	ImageVM       = "rancher/vm"
 	ImageVMPrefix = "rancher/vm-%s"
+	ImageVMTools  = "rancher/vm-tools:0.0.3"
+	ImageNoVNC    = "rancher/novnc:0.0.1"
 
 	RancherOUI = "06:fe"
+
+	LabelApp         = "ranchervm"
+	LabelRoleMigrate = "migrate"
+	LabelRoleVM      = "vm"
+	LabelRoleNoVNC   = "novnc"
 )

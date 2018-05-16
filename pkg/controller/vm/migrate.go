@@ -57,7 +57,10 @@ func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine,
 		return err
 	}
 
-	if err := ctrl.kubeClient.BatchV1().Jobs(common.NamespaceVM).Delete(migrateJob.Name, &metav1.DeleteOptions{}); err != nil {
+	fg := metav1.DeletePropagationForeground
+	if err := ctrl.kubeClient.BatchV1().Jobs(common.NamespaceVM).Delete(migrateJob.Name, &metav1.DeleteOptions{
+		PropagationPolicy: &fg,
+	}); err != nil {
 		return err
 	}
 

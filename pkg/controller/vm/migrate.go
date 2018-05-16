@@ -55,12 +55,12 @@ func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine,
 		return err
 	}
 
-	err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Delete(oldPod.Name, &metav1.DeleteOptions{})
+	err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Delete(oldPod.Name, &metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 
-	err = ctrl.kubeClient.BatchV1().Jobs(NamespaceVM).Delete(migrateJob.Name, &metav1.DeleteOptions{})
+	err = ctrl.kubeClient.BatchV1().Jobs(common.NamespaceVM).Delete(migrateJob.Name, &metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
@@ -71,12 +71,11 @@ func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine,
 func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMachine) (bool, *corev1.Pod, *corev1.Pod, error) {
 
 	// List vm pods
-	pods, err := ctrl.podLister.Pods(NamespaceVM).List(labels.Set{
+	pods, err := ctrl.podLister.Pods(common.NamespaceVM).List(labels.Set{
 		"app":  "ranchervm",
 		"name": vm.Name,
 		"role": "vm",
 	}.AsSelector())
-	glog.V(4).Infof("Found %d pods for vm %s, error %v", len(pods), vm.Name, err)
 
 	if err != nil {
 		return false, nil, nil, err
@@ -87,13 +86,13 @@ func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMac
 	case 1:
 		var getErr, createErr error
 		pod := ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, true)
-		pod, createErr = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(pod)
+		pod, createErr = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(pod)
 		if createErr != nil {
-			glog.V(2).Infof("Error creating vm pod %s/%s: %v", NamespaceVM, vm.Name, createErr)
+			glog.V(2).Infof("Error creating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, createErr)
 			return false, nil, nil, createErr
 		}
 		// Get the created pod into cache for the next poll
-		pod, getErr = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Get(pod.Name, metav1.GetOptions{})
+		pod, getErr = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Get(pod.Name, metav1.GetOptions{})
 		return false, nil, nil, getErr
 
 	// Suspend the migration procedure until both pods enter running
@@ -119,7 +118,7 @@ func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMac
 }
 
 func (ctrl *VirtualMachineController) runMigrationJob(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, newPod *corev1.Pod) (bool, *batchv1.Job, error) {
-	job, err := ctrl.jobLister.Jobs(NamespaceVM).Get(fmt.Sprintf("%s-migrate", vm.Name))
+	job, err := ctrl.jobLister.Jobs(common.NamespaceVM).Get(fmt.Sprintf("%s-migrate", vm.Name))
 
 	switch {
 	case err == nil:
@@ -131,7 +130,7 @@ func (ctrl *VirtualMachineController) runMigrationJob(vm *vmapi.VirtualMachine, 
 			return false, nil, errors.New(fmt.Sprintf("Missing migrate_port annotation on migration pod for vm %s", vm.Name))
 		}
 		job := qemu.NewMigrationJob(vm, oldPod.Name, fmt.Sprintf("tcp:%s:%s", newPod.Status.PodIP, migratePort))
-		job, err = ctrl.kubeClient.BatchV1().Jobs(NamespaceVM).Create(job)
+		job, err = ctrl.kubeClient.BatchV1().Jobs(common.NamespaceVM).Create(job)
 		return false, job, err
 	}
 

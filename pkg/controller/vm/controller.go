@@ -29,9 +29,6 @@ import (
 	"github.com/rancher/vm/pkg/common"
 )
 
-const FinalizerDeletion = "deletion.vm.rancher.com"
-const NamespaceVM = "default"
-
 type VirtualMachineController struct {
 	vmClient   vmclientset.Interface
 	kubeClient kubernetes.Interface
@@ -163,23 +160,23 @@ func (ctrl *VirtualMachineController) enqueueWork(queue workqueue.Interface, obj
 }
 
 func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (pod *corev1.Pod, err error) {
-	pods, err := ctrl.podLister.Pods(NamespaceVM).List(labels.Set{
+	pods, err := ctrl.podLister.Pods(common.NamespaceVM).List(labels.Set{
 		"app":  "ranchervm",
 		"name": vm.Name,
 		"role": "vm",
 	}.AsSelector())
 
 	if err != nil && !apierrors.IsNotFound(err) {
-		glog.V(2).Infof("Error getting vm pod(s) %s/%s: %v", NamespaceVM, vm.Name, err)
+		glog.V(2).Infof("Error getting vm pod(s) %s/%s: %v", common.NamespaceVM, vm.Name, err)
 		return
 	}
 
 	switch len(pods) {
 	case 0:
 		pod = ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, false)
-		pod, err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(pod)
+		pod, err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(pod)
 		if err != nil {
-			glog.V(2).Infof("Error creating vm pod %s/%s: %v", NamespaceVM, vm.Name, err)
+			glog.V(2).Infof("Error creating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, err)
 			return
 		}
 	case 1:
@@ -213,13 +210,13 @@ func (ctrl *VirtualMachineController) updateVMStatus(current *vmapi.VirtualMachi
 func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) (err error) {
 	pod, err := ctrl.updateVMPod(vm)
 	if err != nil {
-		glog.Warningf("error updating vm pod %s/%s: %v", NamespaceVM, vm.Name, err)
+		glog.Warningf("error updating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, err)
 		return
 	}
 
 	if pod != nil && pod.Name != "" {
 		if err = ctrl.updateNovnc(vm, pod.Name); err != nil {
-			glog.Warningf("error updating novnc %s/%s: %v", NamespaceVM, vm.Name, err)
+			glog.Warningf("error updating novnc %s/%s: %v", common.NamespaceVM, vm.Name, err)
 		}
 	}
 
@@ -228,7 +225,7 @@ func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) (err err
 
 func (ctrl *VirtualMachineController) stopVM(vm *vmapi.VirtualMachine) (err error) {
 	vm2 := vm.DeepCopy()
-	err = ctrl.deleteVmPod(NamespaceVM, vm.Name)
+	err = ctrl.deleteVmPod(common.NamespaceVM, vm.Name)
 	switch {
 	case err == nil:
 		vm2.Status.State = vmapi.StateStopping
@@ -238,7 +235,7 @@ func (ctrl *VirtualMachineController) stopVM(vm *vmapi.VirtualMachine) (err erro
 		vm2.Status.State = vmapi.StateError
 	}
 
-	err = ctrl.deleteNovncPod(NamespaceVM, vm.Name)
+	err = ctrl.deleteNovncPod(common.NamespaceVM, vm.Name)
 	switch {
 	case err == nil:
 		// if either the vm or novnc pod had to be deleted, we are stopping
@@ -257,9 +254,9 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) error {
 	if vm.Status.ID == "" || vm.Status.MAC == "" || len(vm.Finalizers) == 0 {
 		vm2 := vm.DeepCopy()
 		uid := string(vm.UID)
-		vm2.Finalizers = append(vm2.Finalizers, FinalizerDeletion)
+		vm2.Finalizers = append(vm2.Finalizers, common.FinalizerDeletion)
 		vm2.Status.ID = fmt.Sprintf("i-%s", uid[:8])
-		vm2.Status.MAC = fmt.Sprintf("06:fe:%s:%s:%s:%s", uid[:2], uid[2:4], uid[4:6], uid[6:8])
+		vm2.Status.MAC = fmt.Sprintf("%s:%s:%s:%s:%s", RancherOUI, uid[:2], uid[2:4], uid[4:6], uid[6:8])
 		ctrl.updateVMStatus(vm, vm2)
 		ctrl.updateVM(vm2)
 		return nil
@@ -275,7 +272,7 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) error {
 	case vmapi.ActionMigrate:
 		err = ctrl.migrateVM(vm)
 	default:
-		glog.Warningf("detected vm %s/%s with invalid action \"%s\"", NamespaceVM, vm.Name, vm.Spec.Action)
+		glog.Warningf("detected vm %s/%s with invalid action \"%s\"", common.NamespaceVM, vm.Name, vm.Spec.Action)
 		// TODO change VM state to ERROR, return no error (don't requeue)
 		return nil
 	}
@@ -289,7 +286,7 @@ func (ctrl *VirtualMachineController) deleteVmPod(ns, name string) error {
 		"name": name,
 	}.AsSelector()
 
-	pods, _ := ctrl.podLister.Pods(NamespaceVM).List(vmPodSelector)
+	pods, _ := ctrl.podLister.Pods(common.NamespaceVM).List(vmPodSelector)
 	if len(pods) == 0 {
 		return apierrors.NewNotFound(corev1.Resource("pod"), name)
 	}
@@ -309,9 +306,9 @@ func (ctrl *VirtualMachineController) deleteVM(vm *vmapi.VirtualMachine) error {
 		vm = vm2
 	}
 
-	err1 := ctrl.deleteVmPod(NamespaceVM, vm.Name)
-	err2 := ctrl.deleteNovncPod(NamespaceVM, vm.Name)
-	err3 := ctrl.deleteNovncService(NamespaceVM, vm.Name)
+	err1 := ctrl.deleteVmPod(common.NamespaceVM, vm.Name)
+	err2 := ctrl.deleteNovncPod(common.NamespaceVM, vm.Name)
+	err3 := ctrl.deleteNovncService(common.NamespaceVM, vm.Name)
 
 	// TODO delete host path
 

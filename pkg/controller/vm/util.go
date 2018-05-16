@@ -53,7 +53,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 
 	vmContainer := corev1.Container{
 		Name:            "vm",
-		Image:           fmt.Sprintf("rancher/vm-%s", string(vm.Spec.MachineImage)),
+		Image:           fmt.Sprintf(common.ImageVMPrefix, string(vm.Spec.MachineImage)),
 		ImagePullPolicy: corev1.PullAlways,
 		Command:         []string{"/usr/bin/startvm"},
 		Env: []corev1.EnvVar{
@@ -139,7 +139,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			InitContainers: []corev1.Container{
 				corev1.Container{
 					Name:            "debootstrap",
-					Image:           "rancher/vm-tools:0.0.3",
+					Image:           common.ImageVMTools,
 					ImagePullPolicy: corev1.PullAlways,
 					VolumeMounts: []corev1.VolumeMount{
 						common.MakeVolumeMount("vm-fs", "/vm-tools", "", false),
@@ -229,9 +229,10 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 			},
 			Containers: []corev1.Container{
 				corev1.Container{
-					Name:    "novnc",
-					Image:   "rancher/novnc:0.0.1",
-					Command: []string{"novnc"},
+					Name:            "novnc",
+					Image:           common.ImageNoVNC,
+					ImagePullPolicy: corev1.PullAlways,
+					Command:         []string{"novnc"},
 					Env: []corev1.EnvVar{
 						common.MakeEnvVar("VM_POD_NAME", podName, nil),
 					},

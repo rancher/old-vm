@@ -14,8 +14,7 @@ var (
 func isValidAction(action vmapi.ActionType) bool {
 	return action == vmapi.ActionStart ||
 		action == vmapi.ActionStop ||
-		action == vmapi.ActionReboot ||
-		action == vmapi.ActionMigrate
+		action == vmapi.ActionReboot
 }
 
 func isValidNamespace(namespace string) bool {
@@ -58,4 +57,9 @@ func isValidPublicKey(publicKey string) bool {
 
 func isValidInstanceCount(instanceCount int32) bool {
 	return instanceCount >= 1 && instanceCount <= 99
+}
+
+// TODO improve
+func isValidNodeName(nodeName string) bool {
+	return true
 }

@@ -70,6 +70,7 @@ func (s *server) newRouter() *mux.Router {
 
 	r.Methods("GET").Path("/v1/instances").Handler(http.HandlerFunc(s.InstanceList))
 	r.Methods("POST").Path("/v1/instances").Handler(http.HandlerFunc(s.InstanceCreate))
+	r.Methods("PUT").Path("/v1/instances").Handler(http.HandlerFunc(s.InstanceUpdate))
 	r.Methods("DELETE").Path("/v1/instances/{name}").Handler(http.HandlerFunc(s.InstanceDelete))
 	r.Methods("POST").Path("/v1/instances/delete").Handler(http.HandlerFunc(s.InstanceDeleteMulti))
 	r.Methods("POST").Path("/v1/instances/{name}/{action}").Handler(http.HandlerFunc(s.InstanceAction))

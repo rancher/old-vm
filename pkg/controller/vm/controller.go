@@ -159,7 +159,8 @@ func (ctrl *VirtualMachineController) enqueueWork(queue workqueue.Interface, obj
 	queue.Add(objName)
 }
 
-func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (pod *corev1.Pod, err error) {
+func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (vm2 *vmapi.VirtualMachine, pod *corev1.Pod, err error) {
+	vm2 = vm
 	pods, err := ctrl.podLister.Pods(common.NamespaceVM).List(labels.Set{
 		"app":  common.LabelApp,
 		"name": vm.Name,
@@ -185,7 +186,8 @@ func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (pod
 		return
 	}
 
-	err = ctrl.updateVMStatusWithPod(vm, vm.DeepCopy(), pod)
+	vm2 = vm.DeepCopy()
+	err = ctrl.updateVMStatusWithPod(vm, vm2, pod)
 	return
 }
 
@@ -217,7 +219,7 @@ func (ctrl *VirtualMachineController) updateVMStatus(current *vmapi.VirtualMachi
 }
 
 func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) (err error) {
-	pod, err := ctrl.updateVMPod(vm)
+	vm2, pod, err := ctrl.updateVMPod(vm)
 	if err != nil {
 		glog.Warningf("error updating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, err)
 		return
@@ -227,6 +229,14 @@ func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) (err err
 		if err = ctrl.updateNovnc(vm, pod.Name); err != nil {
 			glog.Warningf("error updating novnc %s/%s: %v", common.NamespaceVM, vm.Name, err)
 		}
+	}
+
+	if pod != nil && vm2.Spec.NodeName != "" &&
+		vm2.Spec.NodeName != pod.Spec.NodeName &&
+		vm2.Status.State == vmapi.StateRunning ||
+		vm2.Status.State == vmapi.StateMigrating {
+
+		err = ctrl.migrateVM(vm)
 	}
 
 	return
@@ -271,15 +281,12 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) error {
 		return nil
 	}
 
-	// TODO requeue if an error is returned by start/stop/migrate
 	var err error
 	switch vm.Spec.Action {
 	case vmapi.ActionStart:
 		err = ctrl.startVM(vm)
 	case vmapi.ActionStop:
 		err = ctrl.stopVM(vm)
-	case vmapi.ActionMigrate:
-		err = ctrl.migrateVM(vm)
 	default:
 		glog.Warningf("detected vm %s/%s with invalid action \"%s\"", common.NamespaceVM, vm.Name, vm.Spec.Action)
 		// TODO change VM state to ERROR, return no error (don't requeue)

@@ -14,8 +14,9 @@ const (
 
 	RancherOUI = "06:fe"
 
-	LabelApp         = "ranchervm"
-	LabelRoleMigrate = "migrate"
-	LabelRoleVM      = "vm"
-	LabelRoleNoVNC   = "novnc"
+	LabelApp          = "ranchervm"
+	LabelRoleMigrate  = "migrate"
+	LabelRoleVM       = "vm"
+	LabelRoleNoVNC    = "novnc"
+	LabelNodeHostname = "kubernetes.io/hostname"
 )

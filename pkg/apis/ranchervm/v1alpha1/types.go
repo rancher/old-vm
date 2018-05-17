@@ -31,10 +31,9 @@ const (
 type ActionType string
 
 const (
-	ActionStart   ActionType = "start"
-	ActionStop    ActionType = "stop"
-	ActionReboot  ActionType = "reboot"
-	ActionMigrate ActionType = "migrate"
+	ActionStart  ActionType = "start"
+	ActionStop   ActionType = "stop"
+	ActionReboot ActionType = "reboot"
 )
 
 // VirtualMachineSpec is the spec for a VirtualMachine resource
@@ -45,6 +44,10 @@ type VirtualMachineSpec struct {
 	Action       ActionType       `json:"action"`
 	PublicKeys   []string         `json:"public_keys"`
 	HostedNovnc  bool             `json:"hosted_novnc"`
+	// NodeName is the name of the node where the virtual machine should run.
+	// This is mutable at runtime and will trigger a live migration.
+	// +optional
+	NodeName string `json:"node_name"`
 }
 
 type StateType string

@@ -235,6 +235,8 @@ func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {
 	}
 }
 
+var noGracePeriod = int64(0)
+
 func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -265,15 +267,17 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 					},
 				},
 			},
+			TerminationGracePeriodSeconds: &noGracePeriod,
 			Affinity: &corev1.Affinity{
 				PodAffinity: &corev1.PodAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 						corev1.PodAffinityTerm{
 							LabelSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"app":  common.LabelApp,
-									"name": vm.Name,
-									"role": common.LabelRoleVM,
+									"app":         common.LabelApp,
+									"name":        vm.Name,
+									"unique_name": podName,
+									"role":        common.LabelRoleVM,
 								},
 							},
 							TopologyKey: "kubernetes.io/hostname",

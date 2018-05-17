@@ -42,8 +42,8 @@ func main() {
 
 	// migration flags
 	migrate := flag.Bool("migrate", false, "Run the VM migration job")
-	sockPath := flag.String("sock-path", "/var/lib/rancher/vm/zoo/zoo-26f1d7d2_monitor.sock", "Path to VM monitor Unix domain socket")
-	targetURI := flag.String("target-uri", "tcp:172.16.58.187:4444", "URI of the target VM to migrate to")
+	sockPath := flag.String("sock-path", "", "Path to VM monitor Unix domain socket")
+	targetURI := flag.String("target-uri", "", "URI of the target VM to migrate to")
 
 	flag.Parse()
 

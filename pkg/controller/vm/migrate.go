@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/golang/glog"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,8 +20,10 @@ func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) error 
 	case vmapi.StateRunning:
 		vm2 := vm.DeepCopy()
 		vm2.Status.State = vmapi.StateMigrating
-		ctrl.updateVMStatus(vm, vm2)
-		ctrl.migrateVM(vm2)
+		if err := ctrl.updateVMStatus(vm, vm2); err != nil {
+			return err
+		}
+		vm = vm2
 	case vmapi.StateMigrating:
 		break
 	default:
@@ -34,19 +35,33 @@ func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) error 
 		return err
 	}
 
-	succeeded, migrateJob, err := ctrl.runMigrationJob(vm, oldPod, newPod)
+	succeeded, err := ctrl.runMigrationJob(vm, oldPod, newPod)
 	if err != nil || !succeeded {
 		return err
 	}
 
-	if err := ctrl.migrationCleanup(vm, oldPod, newPod, migrateJob); err != nil {
+	if err := ctrl.migrationCleanup(vm, oldPod, newPod); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, newPod *corev1.Pod, migrateJob *batchv1.Job) error {
+var fg = metav1.DeletePropagationForeground
+
+func (ctrl *VirtualMachineController) deleteMigrationJob(vm *vmapi.VirtualMachine) error {
+	return ctrl.kubeClient.BatchV1().Jobs(common.NamespaceVM).Delete(
+		getJobName(vm),
+		&metav1.DeleteOptions{
+			PropagationPolicy: &fg,
+		})
+}
+
+func getJobName(vm *vmapi.VirtualMachine) string {
+	return fmt.Sprintf("%s-migrate", vm.Name)
+}
+
+func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, newPod *corev1.Pod) error {
 	vm2 := vm.DeepCopy()
 	vm2.Spec.Action = vmapi.ActionStart
 	if err := ctrl.updateVMStatusWithPod(vm, vm2, newPod); err != nil {
@@ -57,10 +72,7 @@ func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine,
 		return err
 	}
 
-	fg := metav1.DeletePropagationForeground
-	if err := ctrl.kubeClient.BatchV1().Jobs(common.NamespaceVM).Delete(migrateJob.Name, &metav1.DeleteOptions{
-		PropagationPolicy: &fg,
-	}); err != nil {
+	if err := ctrl.deleteMigrationJob(vm); err != nil {
 		return err
 	}
 
@@ -80,6 +92,8 @@ func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMac
 	if err != nil {
 		return false, nil, nil, err
 	}
+
+	// TODO filter active pods
 
 	switch len(pods) {
 	// If the second pod doesn't already exist, start one.
@@ -117,22 +131,22 @@ func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMac
 	return false, nil, nil, errors.New(fmt.Sprintf("strange number of vm pods found for %s: %d", vm.Name, len(pods)))
 }
 
-func (ctrl *VirtualMachineController) runMigrationJob(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, newPod *corev1.Pod) (bool, *batchv1.Job, error) {
-	job, err := ctrl.jobLister.Jobs(common.NamespaceVM).Get(fmt.Sprintf("%s-migrate", vm.Name))
+func (ctrl *VirtualMachineController) runMigrationJob(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, newPod *corev1.Pod) (bool, error) {
+	job, err := ctrl.jobLister.Jobs(common.NamespaceVM).Get(getJobName(vm))
 
 	switch {
 	case err == nil:
-		return job.Status.Succeeded == 1, job, nil
+		return job.Status.Succeeded == 1, nil
 
 	case apierrors.IsNotFound(err):
 		migratePort, ok := newPod.ObjectMeta.Annotations["migrate_port"]
 		if !ok {
-			return false, nil, errors.New(fmt.Sprintf("Missing migrate_port annotation on migration pod for vm %s", vm.Name))
+			return false, errors.New(fmt.Sprintf("Missing migrate_port annotation on migration pod for vm %s", vm.Name))
 		}
 		job := qemu.NewMigrationJob(vm, oldPod.Name, fmt.Sprintf("tcp:%s:%s", newPod.Status.PodIP, migratePort))
 		job, err = ctrl.kubeClient.BatchV1().Jobs(common.NamespaceVM).Create(job)
-		return false, job, err
+		return false, err
 	}
 
-	return false, nil, errors.New(fmt.Sprintf("error getting job from lister for vm %s: %v", vm.Name, err))
+	return false, errors.New(fmt.Sprintf("error getting job from lister for vm %s: %v", vm.Name, err))
 }

@@ -172,7 +172,14 @@ func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (vm2
 		return
 	}
 
-	switch len(pods) {
+	var alivePods []*corev1.Pod
+	for _, pod := range pods {
+		if pod.DeletionTimestamp == nil {
+			alivePods = append(alivePods, pod)
+		}
+	}
+
+	switch len(alivePods) {
 	case 0:
 		pod = ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, false)
 		pod, err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(pod)
@@ -181,7 +188,7 @@ func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (vm2
 			return
 		}
 	case 1:
-		pod = pods[0]
+		pod = alivePods[0]
 	default:
 		return
 	}
@@ -219,7 +226,7 @@ func (ctrl *VirtualMachineController) updateVMStatus(current *vmapi.VirtualMachi
 }
 
 func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) (err error) {
-	vm2, pod, err := ctrl.updateVMPod(vm)
+	vm, pod, err := ctrl.updateVMPod(vm)
 	if err != nil {
 		glog.Warningf("error updating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, err)
 		return
@@ -231,10 +238,10 @@ func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) (err err
 		}
 	}
 
-	if pod != nil && vm2.Spec.NodeName != "" &&
-		vm2.Spec.NodeName != pod.Spec.NodeName &&
-		vm2.Status.State == vmapi.StateRunning ||
-		vm2.Status.State == vmapi.StateMigrating {
+	if pod != nil && vm.Spec.NodeName != "" &&
+		vm.Spec.NodeName != pod.Spec.NodeName &&
+		vm.Status.State == vmapi.StateRunning ||
+		vm.Status.State == vmapi.StateMigrating {
 
 		err = ctrl.migrateVM(vm)
 	}
@@ -250,6 +257,16 @@ func (ctrl *VirtualMachineController) stopVM(vm *vmapi.VirtualMachine) (err erro
 		vm2.Status.State = vmapi.StateStopping
 	case apierrors.IsNotFound(err):
 		vm2.Status.State = vmapi.StateStopped
+		vm2.Status.NodeName = ""
+	default:
+		vm2.Status.State = vmapi.StateError
+	}
+
+	err = ctrl.deleteMigrationJob(vm)
+	switch {
+	case err == nil:
+		vm2.Status.State = vmapi.StateStopping
+	case apierrors.IsNotFound(err):
 	default:
 		vm2.Status.State = vmapi.StateError
 	}
@@ -276,9 +293,10 @@ func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) error {
 		vm2.Finalizers = append(vm2.Finalizers, common.FinalizerDeletion)
 		vm2.Status.ID = fmt.Sprintf("i-%s", uid[:8])
 		vm2.Status.MAC = fmt.Sprintf("%s:%s:%s:%s:%s", common.RancherOUI, uid[:2], uid[2:4], uid[4:6], uid[6:8])
-		ctrl.updateVMStatus(vm, vm2)
-		ctrl.updateVM(vm2)
-		return nil
+		if err := ctrl.updateVMStatus(vm, vm2); err != nil {
+			return err
+		}
+		vm = vm2
 	}
 
 	var err error
@@ -318,7 +336,9 @@ func (ctrl *VirtualMachineController) deleteVM(vm *vmapi.VirtualMachine) error {
 	if vm.Status.State != vmapi.StateTerminating {
 		vm2 := vm.DeepCopy()
 		vm2.Status.State = vmapi.StateTerminating
-		ctrl.updateVMStatus(vm, vm2)
+		if err := ctrl.updateVMStatus(vm, vm2); err != nil {
+			return err
+		}
 		vm = vm2
 	}
 

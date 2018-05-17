@@ -31,8 +31,18 @@ func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) error 
 	}
 
 	ready, oldPod, newPod, err := ctrl.startMigrateTargetPod(vm)
-	if err != nil || !ready {
+	if err != nil {
 		return err
+	}
+
+	// Check if the user canceled mid-migration
+	if oldPod != nil && vm.Spec.NodeName == oldPod.Spec.NodeName && vm.Status.State == vmapi.StateMigrating {
+		glog.V(2).Infof("User canceled migration of vm %s", vm.Name)
+		return ctrl.migrateRollback(vm, newPod)
+	}
+
+	if !ready {
+		return nil
 	}
 
 	succeeded, err := ctrl.runMigrationJob(vm, oldPod, newPod)
@@ -45,6 +55,20 @@ func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) error 
 	}
 
 	return nil
+}
+
+func (ctrl *VirtualMachineController) migrateRollback(vm *vmapi.VirtualMachine, pod *corev1.Pod) error {
+	if err := ctrl.deleteMigrationJob(vm); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	if err := ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Delete(pod.Name, &metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	vm2 := vm.DeepCopy()
+	vm2.Status.State = vmapi.StateRunning
+	return ctrl.updateVMStatus(vm, vm2)
 }
 
 var fg = metav1.DeletePropagationForeground
@@ -93,9 +117,8 @@ func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMac
 		return false, nil, nil, err
 	}
 
-	// TODO filter active pods
-
-	switch len(pods) {
+	alivePods := GetAlivePods(pods)
+	switch len(alivePods) {
 	// If the second pod doesn't already exist, start one.
 	case 1:
 		var getErr, createErr error
@@ -112,19 +135,17 @@ func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMac
 	// Suspend the migration procedure until both pods enter running
 	// state. Pod phase changes trigger requeueing, so this is safe.
 	case 2:
-		for _, pod := range pods {
+		oldPod := alivePods[0]
+		newPod := alivePods[1]
+		if !oldPod.CreationTimestamp.Before(&(newPod.CreationTimestamp)) {
+			oldPod = alivePods[1]
+			newPod = alivePods[0]
+		}
+		for _, pod := range alivePods {
 			if !common.IsPodReady(pod) {
-				return false, nil, nil, nil
+				return false, oldPod, newPod, nil
 			}
 		}
-
-		oldPod := pods[0]
-		newPod := pods[1]
-		if !oldPod.CreationTimestamp.Before(&(newPod.CreationTimestamp)) {
-			oldPod = pods[1]
-			newPod = pods[0]
-		}
-
 		return true, oldPod, newPod, nil
 	}
 

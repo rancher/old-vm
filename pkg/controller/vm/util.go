@@ -14,6 +14,16 @@ import (
 	"github.com/rancher/vm/pkg/common"
 )
 
+func GetAlivePods(pods []*corev1.Pod) []*corev1.Pod {
+	var alivePods []*corev1.Pod
+	for _, pod := range pods {
+		if pod.DeletionTimestamp == nil {
+			alivePods = append(alivePods, pod)
+		}
+	}
+	return alivePods
+}
+
 var privileged = true
 
 func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {

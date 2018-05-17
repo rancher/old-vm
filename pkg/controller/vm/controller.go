@@ -172,13 +172,7 @@ func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (vm2
 		return
 	}
 
-	var alivePods []*corev1.Pod
-	for _, pod := range pods {
-		if pod.DeletionTimestamp == nil {
-			alivePods = append(alivePods, pod)
-		}
-	}
-
+	alivePods := GetAlivePods(pods)
 	switch len(alivePods) {
 	case 0:
 		pod = ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, false)

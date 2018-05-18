@@ -24,6 +24,15 @@ func GetAlivePods(pods []*corev1.Pod) []*corev1.Pod {
 	return alivePods
 }
 
+func IsPodUnschedulable(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse {
+			return condition.Reason == corev1.PodReasonUnschedulable
+		}
+	}
+	return false
+}
+
 var privileged = true
 
 func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {

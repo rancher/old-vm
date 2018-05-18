@@ -219,11 +219,11 @@ func (ctrl *VirtualMachineController) updateVMStatus(current *vmapi.VirtualMachi
 	return
 }
 
-func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) (err error) {
+func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) error {
 	vm, pod, err := ctrl.updateVMPod(vm)
 	if err != nil {
 		glog.Warningf("error updating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, err)
-		return
+		return err
 	}
 
 	if pod != nil && pod.Name != "" {
@@ -232,15 +232,40 @@ func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) (err err
 		}
 	}
 
+	// If vm is in pending state and pod is unschedulable, check to see if the
+	// requested node name matches the pod node affinity. If they are mismatched,
+	// delete the pod and allow the process to start over.
+	if vm.Status.State == vmapi.StatePending && pod != nil && IsPodUnschedulable(pod) {
+		if pod.Spec.Affinity != nil &&
+			pod.Spec.Affinity.NodeAffinity != nil &&
+			pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil &&
+			len(pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms) == 1 {
+
+			nodeSelector := pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+			if len(nodeSelector.NodeSelectorTerms) == 1 &&
+				len(nodeSelector.NodeSelectorTerms[0].MatchExpressions) == 1 {
+
+				requirement := nodeSelector.NodeSelectorTerms[0].MatchExpressions[0]
+				if requirement.Key == common.LabelNodeHostname &&
+					requirement.Operator == corev1.NodeSelectorOpIn &&
+					len(requirement.Values) == 1 &&
+					vm.Spec.NodeName != requirement.Values[0] {
+
+					glog.V(2).Infof("User modified selector for unschedulable vm %s", vm.Name)
+					return ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Delete(pod.Name, &metav1.DeleteOptions{})
+				}
+			}
+		}
+	}
+
 	if pod != nil && vm.Spec.NodeName != "" &&
 		vm.Spec.NodeName != pod.Spec.NodeName &&
 		vm.Status.State == vmapi.StateRunning ||
 		vm.Status.State == vmapi.StateMigrating {
-
-		err = ctrl.migrateVM(vm)
+		return ctrl.migrateVM(vm)
 	}
 
-	return
+	return err
 }
 
 func (ctrl *VirtualMachineController) stopVM(vm *vmapi.VirtualMachine) (err error) {

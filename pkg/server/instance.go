@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strconv"
+	"reflect"
 	"strings"
 
 	"github.com/golang/glog"
@@ -41,7 +41,7 @@ func (s *server) InstanceList(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
-type InstanceCreate struct {
+type Instance struct {
 	Name        string   `json:"name"`
 	Cpus        int32    `json:"cpus"`
 	Memory      int32    `json:"memory"`
@@ -49,72 +49,69 @@ type InstanceCreate struct {
 	Action      string   `json:"action"`
 	PublicKeys  []string `json:"pubkey"`
 	HostedNovnc bool     `json:"novnc"`
-	Instances   int32    `json:"instances"`
+	NodeName    string   `json:"node_name"`
 }
 
-func (s *server) InstanceCreate(w http.ResponseWriter, r *http.Request) {
+func (i *Instance) IsValid() bool {
+	return isValidName(i.Name) &&
+		isValidCpus(i.Cpus) &&
+		isValidMemory(i.Memory) &&
+		isValidImage(i.Image) &&
+		isValidAction(vmapi.ActionType(i.Action)) &&
+		isValidPublicKeys(i.PublicKeys) &&
+		isValidNodeName(i.NodeName)
+}
+
+type InstanceCreate struct {
+	Instance  `json:",inline"`
+	Instances int32 `json:"instances"`
+}
+
+func (ic *InstanceCreate) IsValid() bool {
+	return ic.Instance.IsValid() &&
+		isValidInstanceCount(ic.Instances)
+}
+
+func (s *server) parseInstanceCreate(w http.ResponseWriter, r *http.Request) *InstanceCreate {
 	var ic InstanceCreate
 	switch {
 	case strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded"):
-		r.ParseForm()
+		w.WriteHeader(http.StatusNotImplemented)
+		return nil
 
-		if len(r.PostForm["name"]) != 1 ||
-			len(r.PostForm["cpus"]) != 1 ||
-			len(r.PostForm["mem"]) != 1 ||
-			len(r.PostForm["image"]) != 1 ||
-			len(r.PostForm["pubkey"]) < 1 ||
-			len(r.PostForm["action"]) != 1 ||
-			len(r.PostForm["novnc"]) != 1 ||
-			len(r.PostForm["instances"]) != 1 {
-
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		cpus, _ := strconv.Atoi(r.PostForm["cpus"][0])
-		mem, _ := strconv.Atoi(r.PostForm["mem"][0])
-		instances, _ := strconv.Atoi(r.PostForm["instances"][0])
-		ic = InstanceCreate{
-			Name:        r.PostForm["name"][0],
-			Cpus:        int32(cpus),
-			Memory:      int32(mem),
-			Image:       r.PostForm["image"][0],
-			Action:      r.PostForm["action"][0],
-			PublicKeys:  r.PostForm["pubkey"],
-			HostedNovnc: (r.PostForm["novnc"][0] == "true"),
-			Instances:   int32(instances),
-		}
 	default:
 		defer r.Body.Close()
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return nil
 		}
 		err = json.Unmarshal(body, &ic)
 		if err != nil {
 			glog.V(3).Infof("error unmarshaling json: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
-			return
+			return nil
 		}
 	}
 
-	if !isValidName(ic.Name) ||
-		!isValidCpus(ic.Cpus) ||
-		!isValidMemory(ic.Memory) ||
-		!isValidImage(ic.Image) ||
-		!isValidAction(vmapi.ActionType(ic.Action)) ||
-		!isValidPublicKeys(ic.PublicKeys) ||
-		!isValidInstanceCount(ic.Instances) {
-
+	if !ic.IsValid() {
 		w.WriteHeader(http.StatusBadRequest)
+		return nil
+	}
+	return &ic
+}
+
+func (s *server) InstanceCreate(w http.ResponseWriter, r *http.Request) {
+	ic := s.parseInstanceCreate(w, r)
+	if ic == nil {
 		return
 	}
+	glog.V(5).Infof("Create Instance: %+v", ic)
 
 	if ic.Instances == 1 {
-		s.instanceCreateOne(w, r, &ic)
+		s.instanceCreateOne(w, r, ic)
 	} else {
-		s.instanceCreateMany(w, r, &ic)
+		s.instanceCreateMany(w, r, ic)
 	}
 }
 
@@ -130,6 +127,7 @@ func (s *server) instanceCreateOne(w http.ResponseWriter, r *http.Request, ic *I
 			Action:       vmapi.ActionType(ic.Action),
 			PublicKeys:   ic.PublicKeys,
 			HostedNovnc:  ic.HostedNovnc,
+			NodeName:     ic.NodeName,
 		},
 	}
 
@@ -157,6 +155,7 @@ func (s *server) instanceCreateMany(w http.ResponseWriter, r *http.Request, ic *
 				Action:       vmapi.ActionType(ic.Action),
 				PublicKeys:   ic.PublicKeys,
 				HostedNovnc:  ic.HostedNovnc,
+				NodeName:     ic.NodeName,
 			},
 		}
 
@@ -174,6 +173,84 @@ func (s *server) instanceCreateMany(w http.ResponseWriter, r *http.Request, ic *
 		}
 	}
 	w.WriteHeader(http.StatusCreated)
+}
+
+func (s *server) parseInstance(w http.ResponseWriter, r *http.Request) *Instance {
+	var i Instance
+	switch {
+	case strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded"):
+		w.WriteHeader(http.StatusNotImplemented)
+		return nil
+
+	default:
+		defer r.Body.Close()
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return nil
+		}
+		err = json.Unmarshal(body, &i)
+		if err != nil {
+			glog.V(3).Infof("error unmarshaling json: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return nil
+		}
+	}
+
+	if !i.IsValid() {
+		w.WriteHeader(http.StatusBadRequest)
+		return nil
+	}
+	return &i
+}
+
+func (s *server) overlayVMSpec(vm *vmapi.VirtualMachine, i *Instance) *vmapi.VirtualMachine {
+	vm2 := vm.DeepCopy()
+	vm2.Spec.Cpus = i.Cpus
+	vm2.Spec.MemoryMB = i.Memory
+	vm2.Spec.Action = vmapi.ActionType(i.Action)
+	vm2.Spec.PublicKeys = i.PublicKeys
+	vm2.Spec.HostedNovnc = i.HostedNovnc
+	vm2.Spec.NodeName = i.NodeName
+	return vm2
+}
+
+func (s *server) updateVMSpec(current *vmapi.VirtualMachine, updated *vmapi.VirtualMachine) (changed bool, err error) {
+	if !reflect.DeepEqual(current.Spec, updated.Spec) {
+		changed = true
+		updated, err = s.vmClient.VirtualmachineV1alpha1().VirtualMachines().Update(updated)
+	}
+	return
+}
+
+func (s *server) InstanceUpdate(w http.ResponseWriter, r *http.Request) {
+	i := s.parseInstance(w, r)
+	if i == nil {
+		return
+	}
+	glog.V(5).Infof("Update Instance: %+v", i)
+
+	vm, err := s.vmClient.VirtualmachineV1alpha1().VirtualMachines().Get(i.Name, metav1.GetOptions{})
+	switch {
+	case err == nil:
+		vm2 := s.overlayVMSpec(vm, i)
+		changed, err := s.updateVMSpec(vm, vm2)
+
+		switch {
+		case err != nil:
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		case changed:
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNotModified)
+		}
+	case apierrors.IsNotFound(err):
+		w.WriteHeader(http.StatusNotFound)
+	default:
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
 }
 
 func (s *server) InstanceDelete(w http.ResponseWriter, r *http.Request) {

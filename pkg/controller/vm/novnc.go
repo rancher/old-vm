@@ -8,83 +8,94 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
+	"github.com/rancher/vm/pkg/common"
 )
 
-// FIXME shouldn't be hardcoded
-const NODE_HOSTNAME = "kvm.local"
-
-func (ctrl *VirtualMachineController) updateNovnc(vm *vmapi.VirtualMachine) (err error) {
+func (ctrl *VirtualMachineController) updateNovnc(vm *vmapi.VirtualMachine, podName string) (err error) {
 	if vm.Spec.HostedNovnc {
-		if err = ctrl.updateNovncPod(vm); err != nil {
-			glog.Warningf("error updating novnc pod %s/%s: %v", NamespaceVM, vm.Name, err)
+		if err = ctrl.updateNovncPod(vm, podName); err != nil {
+			glog.Warningf("error updating novnc pod %s: %v", vm.Name, err)
 		}
 		if err = ctrl.updateNovncService(vm); err != nil {
-			glog.Warningf("error updating novnc service %s/%s: %v", NamespaceVM, vm.Name, err)
+			glog.Warningf("error updating novnc service %s: %v", vm.Name, err)
 		}
 	} else {
-		if err = ctrl.deleteNovncPod(NamespaceVM, vm.Name); err != nil {
-			glog.Warningf("error deleting novnc pod %s/%s: %v", NamespaceVM, vm.Name, err)
+		if err = ctrl.deleteNovncPod(vm.Name); err != nil && !apierrors.IsNotFound(err) {
+			glog.Warningf("error deleting novnc pod %s: %v", vm.Name, err)
 		}
-		if err = ctrl.deleteNovncService(NamespaceVM, vm.Name); err != nil {
-			glog.Warningf("error deleting novnc service %s/%s: %v", NamespaceVM, vm.Name, err)
+		if err = ctrl.deleteNovncService(vm.Name); err != nil && !apierrors.IsNotFound(err) {
+			glog.Warningf("error deleting novnc service %s: %v", vm.Name, err)
 		}
 		vm2 := vm.DeepCopy()
 		vm2.Status.VncEndpoint = ""
 		if err = ctrl.updateVMStatus(vm, vm2); err != nil {
-			glog.Warningf("error removing vnc endpoint from vm %s/%s: %v", NamespaceVM, vm.Name, err)
+			glog.Warningf("error removing vnc endpoint from vm %s/%s: %v", common.NamespaceVM, vm.Name, err)
 		}
 	}
 	return
 }
 
-func (ctrl *VirtualMachineController) updateNovncPod(vm *vmapi.VirtualMachine) (err error) {
-	pod, err := ctrl.podLister.Pods(NamespaceVM).Get(vm.Name + "-novnc")
+func (ctrl *VirtualMachineController) updateNovncPod(vm *vmapi.VirtualMachine, podName string) error {
+	pod, err := ctrl.podLister.Pods(common.NamespaceVM).Get(vm.Name + "-novnc")
+	switch {
+	case !apierrors.IsNotFound(err):
+		return err
+	case err == nil:
+		if pod.DeletionTimestamp == nil {
+			return nil
+		}
+		fallthrough
+	default:
+		pod, err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(makeNovncPod(vm, podName))
+	}
+	return err
+}
+
+func (ctrl *VirtualMachineController) updateNovncService(vm *vmapi.VirtualMachine) error {
+	svc, err := ctrl.svcLister.Services(common.NamespaceVM).Get(vm.Name + "-novnc")
 	switch {
 	case err == nil:
-		glog.V(2).Infof("Found existing novnc pod %s/%s", pod.Namespace, pod.Name)
-	case !apierrors.IsNotFound(err):
-		glog.V(2).Infof("error getting novnc pod %s/%s: %v", NamespaceVM, vm.Name, err)
-		return
-	default:
-		_, err = ctrl.kubeClient.CoreV1().Pods(NamespaceVM).Create(makeNovncPod(vm))
-		if err != nil {
-			glog.V(2).Infof("Error creating novnc pod %s/%s: %v", NamespaceVM, vm.Name, err)
-			return
+		break
+	case apierrors.IsNotFound(err):
+		if svc, err = ctrl.kubeClient.CoreV1().Services(common.NamespaceVM).Create(makeNovncService(vm)); err != nil {
+			return err
 		}
+	default:
+		return err
 	}
-	return
-}
 
-func (ctrl *VirtualMachineController) updateNovncService(vm *vmapi.VirtualMachine) (err error) {
+	switch {
+	case vm.Status.NodeIP == "":
+		return nil
+	case len(svc.Spec.Ports) != 1:
+		return nil
+	case svc.Spec.Ports[0].NodePort <= 0:
+		return nil
+	}
+
 	vm2 := vm.DeepCopy()
+	vm2.Status.VncEndpoint = fmt.Sprintf("%s:%d", vm.Status.NodeIP, svc.Spec.Ports[0].NodePort)
+	return ctrl.updateVMStatus(vm, vm2)
+}
 
-	svc, err := ctrl.svcLister.Services(NamespaceVM).Get(vm.Name + "-novnc")
+func (ctrl *VirtualMachineController) deleteNovncPod(name string) error {
+	_, err := ctrl.podLister.Pods(common.NamespaceVM).Get(name + "-novnc")
 	switch {
 	case err == nil:
-		glog.V(2).Infof("Found existing novnc service %s/%s", svc.Namespace, svc.Name)
-		vm2.Status.VncEndpoint = fmt.Sprintf("%s:%d", NODE_HOSTNAME, svc.Spec.Ports[0].NodePort)
-	case !apierrors.IsNotFound(err):
-		glog.V(2).Infof("error getting novnc service %s/%s: %v", NamespaceVM, vm.Name, err)
-		return
+		glog.V(2).Infof("trying to delete novnc pod %s", name)
+		return ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Delete(name+"-novnc", &metav1.DeleteOptions{})
 	default:
-		svc, err = ctrl.kubeClient.CoreV1().Services(NamespaceVM).Create(makeNovncService(vm))
-		if err != nil {
-			glog.V(2).Infof("Error creating novnc service %s/%s: %v", NamespaceVM, vm.Name, err)
-			return
-		}
-		vm2.Status.VncEndpoint = fmt.Sprintf("%s:%d", NODE_HOSTNAME, svc.Spec.Ports[0].NodePort)
+		return err
 	}
-
-	err = ctrl.updateVMStatus(vm, vm2)
-	return
 }
 
-func (ctrl *VirtualMachineController) deleteNovncPod(ns, name string) error {
-	glog.V(2).Infof("trying to delete novnc pod %s/%s", ns, name)
-	return ctrl.kubeClient.CoreV1().Pods(ns).Delete(name+"-novnc", &metav1.DeleteOptions{})
-}
-
-func (ctrl *VirtualMachineController) deleteNovncService(ns, name string) error {
-	glog.V(2).Infof("trying to delete novnc service %s/%s", ns, name)
-	return ctrl.kubeClient.CoreV1().Services(ns).Delete(name+"-novnc", &metav1.DeleteOptions{})
+func (ctrl *VirtualMachineController) deleteNovncService(name string) error {
+	_, err := ctrl.svcLister.Services(common.NamespaceVM).Get(name + "-novnc")
+	switch {
+	case err == nil:
+		glog.V(2).Infof("trying to delete novnc service %s", name)
+		return ctrl.kubeClient.CoreV1().Services(common.NamespaceVM).Delete(name+"-novnc", &metav1.DeleteOptions{})
+	default:
+		return err
+	}
 }

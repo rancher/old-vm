@@ -19,6 +19,7 @@ import (
 	vmclientset "github.com/rancher/vm/pkg/client/clientset/versioned"
 	vminformers "github.com/rancher/vm/pkg/client/informers/externalversions/virtualmachine/v1alpha1"
 	vmlisters "github.com/rancher/vm/pkg/client/listers/virtualmachine/v1alpha1"
+	"github.com/rancher/vm/pkg/common"
 )
 
 type IPDiscoveryController struct {
@@ -168,7 +169,7 @@ func (ctrl *IPDiscoveryController) updateARPTable() {
 		// 	continue
 		// }
 		// only store entries involving rancher vms
-		if !strings.HasPrefix(f[3], "06:fe") {
+		if !strings.HasPrefix(f[3], common.RancherOUI) {
 			continue
 		}
 

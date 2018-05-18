@@ -44,11 +44,10 @@ type VirtualMachineSpec struct {
 	Action       ActionType       `json:"action"`
 	PublicKeys   []string         `json:"public_keys"`
 	HostedNovnc  bool             `json:"hosted_novnc"`
-	Disks        VDisk            `json:"disks"`
-}
-
-type VDisk struct {
-	Root bool
+	// NodeName is the name of the node where the virtual machine should run.
+	// This is mutable at runtime and will trigger a live migration.
+	// +optional
+	NodeName string `json:"node_name"`
 }
 
 type StateType string
@@ -68,6 +67,8 @@ const (
 	// StateTerminated indicates the VM is deleted. The Root block device
 	// belonging to the VM may or may not be deleted.
 	StateTerminated StateType = "terminated"
+	// StateMigrating indicates the VM is migrating to a new node
+	StateMigrating StateType = "migrating"
 	// StateError indicates something went horribly wrong and we are not sure
 	// how to proceed
 	StateError StateType = "error"
@@ -87,6 +88,10 @@ type VirtualMachineStatus struct {
 	MAC string `json:"mac"`
 	// IP address assigned to the guest NIC
 	IP string `json:"ip"`
+	// NodeName is the name of the node where the virtual machine is running
+	NodeName string `json:"node_name"`
+	// NodeIP is the IP address of the node where the virtual machine is running
+	NodeIP string `json:"node_ip"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

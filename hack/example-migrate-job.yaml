@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: yyz-migrate
+spec:
+  template:
+    metadata:
+      name: yyz-migrate
+    spec:
+      # The job needs to be co-located with the old/existing VM
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app:  ranchervm
+                name: yyz
+                role: vm
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: migrate
+        image: llparse/vm:dev
+        imagePullPolicy: Always
+        command: [ "sh", "-c"]
+        args:
+        - exec /ranchervm -migrate -sock-path /vm/yyz-3e977b63_monitor.sock -target-uri tcp:172.16.58.187:4444 -v 4
+        volumeMounts:
+        - mountPath: /vm
+          name: vm-socket
+      restartPolicy: Never
+      volumes:
+      - name: vm-socket
+        hostPath:
+          path: /var/lib/rancher/vm/yyz

@@ -2,97 +2,49 @@ package vm
 
 import (
 	"fmt"
+	"math/rand"
 	"strconv"
+	"strings"
 
-	"github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
+	"github.com/rancher/vm/pkg/common"
 )
 
-const HostStateBaseDir = "/var/lib/rancher/vm"
-
-func makeEnvVar(name, value string, valueFrom *corev1.EnvVarSource) corev1.EnvVar {
-	return corev1.EnvVar{
-		Name:      name,
-		Value:     value,
-		ValueFrom: valueFrom,
+func GetAlivePods(pods []*corev1.Pod) []*corev1.Pod {
+	var alivePods []*corev1.Pod
+	for _, pod := range pods {
+		if pod.DeletionTimestamp == nil {
+			alivePods = append(alivePods, pod)
+		}
 	}
+	return alivePods
 }
 
-func makeEnvVarFieldPath(name, fieldPath string) corev1.EnvVar {
-	return corev1.EnvVar{
-		Name: name,
-		ValueFrom: &corev1.EnvVarSource{
-			FieldRef: &corev1.ObjectFieldSelector{
-				FieldPath: fieldPath,
-			},
-		},
+func IsPodUnschedulable(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse {
+			return condition.Reason == corev1.PodReasonUnschedulable
+		}
 	}
-}
-
-func makeVolEmptyDir(name string) corev1.Volume {
-	return corev1.Volume{
-		Name: name,
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		},
-	}
-}
-
-func makeVolHostPath(name, path string) corev1.Volume {
-	return corev1.Volume{
-		Name: name,
-		VolumeSource: corev1.VolumeSource{
-			HostPath: &corev1.HostPathVolumeSource{
-				Path: path,
-			},
-		},
-	}
-}
-
-func makeVolFieldPath(name, path, fieldPath string) corev1.Volume {
-	return corev1.Volume{
-		Name: name,
-		VolumeSource: corev1.VolumeSource{
-			DownwardAPI: &corev1.DownwardAPIVolumeSource{
-				Items: []corev1.DownwardAPIVolumeFile{
-					corev1.DownwardAPIVolumeFile{
-						Path: path,
-						FieldRef: &corev1.ObjectFieldSelector{
-							FieldPath: fieldPath,
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func makeVolumeMount(name, mountPath, subPath string, readOnly bool) corev1.VolumeMount {
-	return corev1.VolumeMount{
-		Name:             name,
-		ReadOnly:         readOnly,
-		MountPath:        mountPath,
-		SubPath:          subPath,
-		MountPropagation: nil,
-	}
-}
-
-func makeHostStateVol(vmName, volName string) corev1.Volume {
-	return corev1.Volume{
-		Name: volName,
-		VolumeSource: corev1.VolumeSource{
-			HostPath: &corev1.HostPathVolumeSource{
-				Path: fmt.Sprintf("%s/%s/%s", HostStateBaseDir, vmName, volName),
-			},
-		},
-	}
+	return false
 }
 
 var privileged = true
 
-func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, iface string, noResourceLimits bool) *corev1.Pod {
+func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {
+	var publicKeys []*v1alpha1.Credential
+	for _, publicKeyName := range vm.Spec.PublicKeys {
+		publicKey, err := ctrl.credLister.Get(publicKeyName)
+		if err != nil {
+			continue
+		}
+		publicKeys = append(publicKeys, publicKey)
+	}
+
 	cpu := strconv.Itoa(int(vm.Spec.Cpus))
 	mem := strconv.Itoa(int(vm.Spec.MemoryMB))
 	image := string(vm.Spec.MachineImage)
@@ -103,7 +55,7 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 				Command: []string{
 					"/bin/sh",
 					"-c",
-					"[ -S /vm/${MY_POD_NAMESPACE}_${MY_POD_NAME}.sock ]",
+					"[ -S /vm/${MY_POD_NAME}_vnc.sock ]",
 				},
 			},
 		},
@@ -115,32 +67,34 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 	}
 
 	vmContainer := corev1.Container{
-		Name:            "vm",
-		Image:           fmt.Sprintf("rancher/vm-%s", string(vm.Spec.MachineImage)),
+		Name:            common.LabelRoleVM,
+		Image:           fmt.Sprintf(common.ImageVMPrefix, string(vm.Spec.MachineImage)),
 		ImagePullPolicy: corev1.PullAlways,
 		Command:         []string{"/usr/bin/startvm"},
 		Env: []corev1.EnvVar{
-			makeEnvVarFieldPath("MY_POD_NAME", "metadata.name"),
-			makeEnvVarFieldPath("MY_POD_NAMESPACE", "metadata.namespace"),
-			makeEnvVar("IFACE", iface, nil),
-			makeEnvVar("MEMORY_MB", mem, nil),
-			makeEnvVar("CPUS", cpu, nil),
-			makeEnvVar("MAC", vm.Status.MAC, nil),
-			makeEnvVar("INSTANCE_ID", vm.Status.ID, nil),
+			common.MakeEnvVarFieldPath("MY_POD_NAME", "metadata.name"),
+			common.MakeEnvVarFieldPath("MY_POD_NAMESPACE", "metadata.namespace"),
+			common.MakeEnvVar("IFACE", iface, nil),
+			common.MakeEnvVar("MEMORY_MB", mem, nil),
+			common.MakeEnvVar("CPUS", cpu, nil),
+			common.MakeEnvVar("MAC", vm.Status.MAC, nil),
+			common.MakeEnvVar("INSTANCE_ID", vm.Status.ID, nil),
+			common.MakeEnvVar("MIGRATE", strconv.FormatBool(migrate), nil),
+			common.MakeEnvVar("MY_VM_NAME", vm.Name, nil),
 		},
 		VolumeMounts: []corev1.VolumeMount{
-			makeVolumeMount("vm-image", "/image", "", false),
-			makeVolumeMount("dev-kvm", "/dev/kvm", "", false),
-			makeVolumeMount("vm-socket", "/vm", "", false),
-			makeVolumeMount("vm-fs", "/bin", "bin", true),
+			common.MakeVolumeMount("vm-image", "/image", "", false),
+			common.MakeVolumeMount("dev-kvm", "/dev/kvm", "", false),
+			common.MakeVolumeMount("vm-socket", "/vm", "", false),
+			common.MakeVolumeMount("vm-fs", "/bin", "bin", true),
 			// kubernetes mounts /etc/hosts, /etc/hostname, /etc/resolv.conf
 			// we must grant write permissions to /etc to allow these mounts
-			makeVolumeMount("vm-fs", "/etc", "etc", false),
-			makeVolumeMount("vm-fs", "/lib", "lib", true),
-			makeVolumeMount("vm-fs", "/lib64", "lib64", true),
-			makeVolumeMount("vm-fs", "/sbin", "sbin", true),
-			makeVolumeMount("vm-fs", "/usr", "usr", true),
-			makeVolumeMount("vm-fs", "/var", "var", true),
+			common.MakeVolumeMount("vm-fs", "/etc", "etc", false),
+			common.MakeVolumeMount("vm-fs", "/lib", "lib", true),
+			common.MakeVolumeMount("vm-fs", "/lib64", "lib64", true),
+			common.MakeVolumeMount("vm-fs", "/sbin", "sbin", true),
+			common.MakeVolumeMount("vm-fs", "/usr", "usr", true),
+			common.MakeVolumeMount("vm-fs", "/var", "var", true),
 		},
 		LivenessProbe: vncProbe,
 		// TODO readinessProbe could be used for checking SSH/RDP/etc
@@ -166,19 +120,22 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 
 	// add public keys to env vars
 	vmContainer.Env = append(vmContainer.Env,
-		makeEnvVar("PUBLIC_KEY_COUNT", strconv.Itoa(len(publicKeys)), nil))
+		common.MakeEnvVar("PUBLIC_KEY_COUNT", strconv.Itoa(len(publicKeys)), nil))
 	for i, publicKey := range publicKeys {
 		vmContainer.Env = append(vmContainer.Env,
-			makeEnvVar(fmt.Sprintf("PUBLIC_KEY_%d", i+1), publicKey.Spec.PublicKey, nil))
+			common.MakeEnvVar(fmt.Sprintf("PUBLIC_KEY_%d", i+1), publicKey.Spec.PublicKey, nil))
 	}
 
-	return &corev1.Pod{
+	uniquePodName := newPodName(vm.Name)
+	vmPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: vm.Name,
+			// TODO: use GenerateName, find alternative to selector on unique_name
+			Name: uniquePodName,
 			Labels: map[string]string{
-				"app":  "ranchervm",
-				"name": vm.Name,
-				"role": "vm",
+				"app":         common.LabelApp,
+				"name":        vm.Name,
+				"unique_name": uniquePodName,
+				"role":        common.LabelRoleVM,
 			},
 			Annotations: map[string]string{
 				"cpus":      cpu,
@@ -190,27 +147,89 @@ func makeVMPod(vm *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, i
 		},
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
-				makeHostStateVol(vm.Name, "vm-fs"),
-				makeHostStateVol(vm.Name, "vm-image"),
-				makeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", HostStateBaseDir, vm.Name)),
-				makeVolHostPath("dev-kvm", "/dev/kvm"),
+				common.MakeHostStateVol(vm.Name, "vm-fs"),
+				common.MakeHostStateVol(vm.Name, "vm-image"),
+				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, vm.Name)),
+				common.MakeVolHostPath("dev-kvm", "/dev/kvm"),
 			},
 			InitContainers: []corev1.Container{
 				corev1.Container{
 					Name:            "debootstrap",
-					Image:           "rancher/vm-tools:0.0.2",
+					Image:           common.ImageVMTools,
 					ImagePullPolicy: corev1.PullAlways,
 					VolumeMounts: []corev1.VolumeMount{
-						makeVolumeMount("vm-fs", "/vm-tools", "", false),
+						common.MakeVolumeMount("vm-fs", "/vm-tools", "", false),
 					},
 				},
 			},
 			Containers: []corev1.Container{
 				vmContainer,
 			},
+			Affinity: &corev1.Affinity{
+				PodAntiAffinity: &corev1.PodAntiAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+						corev1.PodAffinityTerm{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app":  common.LabelApp,
+									"name": vm.Name,
+									"role": common.LabelRoleVM,
+								},
+							},
+							TopologyKey: common.LabelNodeHostname,
+						},
+					},
+				},
+			},
 			HostNetwork: true,
 		},
 	}
+
+	if migrate {
+		// TODO this could lead to port conflict in rare circumstance, find a
+		// better way. Possibly after MAC VLAN support we can run pod outside
+		// host network and use a service to target static migration port.
+		migratePort := strconv.Itoa(32768 + (rand.Int() % 32768))
+
+		migratePortVar := common.MakeEnvVar("MIGRATE_PORT", migratePort, nil)
+		vmPod.Spec.Containers[0].Env = append(vmPod.Spec.Containers[0].Env, migratePortVar)
+		vmPod.ObjectMeta.Annotations["migrate_port"] = migratePort
+	}
+
+	addNodeAffinity(vmPod, vm)
+
+	return vmPod
+}
+
+// addNodeAffinity adds a hard affinity constraint to schedule a vm pod onto a
+// specific node, if specified. Providing a node name that doesn't exist is
+// allowed; pod scheduling will hang until a node with specified name is added.
+func addNodeAffinity(pod *corev1.Pod, vm *v1alpha1.VirtualMachine) {
+	if vm.Spec.NodeName == "" {
+		return
+	}
+	pod.Spec.Affinity.NodeAffinity = &corev1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+			NodeSelectorTerms: []corev1.NodeSelectorTerm{
+				corev1.NodeSelectorTerm{
+					MatchExpressions: []corev1.NodeSelectorRequirement{
+						corev1.NodeSelectorRequirement{
+							Key:      common.LabelNodeHostname,
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{vm.Spec.NodeName},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func newPodName(name string) string {
+	return strings.Join([]string{
+		name,
+		fmt.Sprintf("%08x", rand.Uint32()),
+	}, common.NameDelimiter)
 }
 
 func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {
@@ -226,41 +245,62 @@ func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"app":  "ranchervm",
+				"app":  common.LabelApp,
 				"name": vm.Name,
-				"role": "novnc",
+				"role": common.LabelRoleNoVNC,
 			},
 			Type: corev1.ServiceTypeNodePort,
 		},
 	}
 }
 
-func makeNovncPod(vm *v1alpha1.VirtualMachine) *corev1.Pod {
+var noGracePeriod = int64(0)
+
+func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: vm.Name + "-novnc",
 			Labels: map[string]string{
-				"app":  "ranchervm",
+				"app":  common.LabelApp,
 				"name": vm.Name,
-				"role": "novnc",
+				"role": common.LabelRoleNoVNC,
 			},
 		},
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
-				makeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", HostStateBaseDir, vm.Name)),
-				makeVolFieldPath("podinfo", "labels", "metadata.labels"),
+				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, vm.Name)),
+				common.MakeVolFieldPath("podinfo", "labels", "metadata.labels"),
 			},
 			Containers: []corev1.Container{
 				corev1.Container{
-					Name:    "novnc",
-					Image:   "rancher/novnc:0.0.1",
-					Command: []string{"novnc"},
+					Name:            common.LabelRoleNoVNC,
+					Image:           common.ImageNoVNC,
+					ImagePullPolicy: corev1.PullAlways,
+					Command:         []string{"novnc"},
 					Env: []corev1.EnvVar{
-						makeEnvVarFieldPath("MY_POD_NAMESPACE", "metadata.namespace"),
+						common.MakeEnvVar("VM_POD_NAME", podName, nil),
 					},
 					VolumeMounts: []corev1.VolumeMount{
-						makeVolumeMount("vm-socket", "/vm", "", false),
-						makeVolumeMount("podinfo", "/podinfo", "", false),
+						common.MakeVolumeMount("vm-socket", "/vm", "", false),
+						common.MakeVolumeMount("podinfo", "/podinfo", "", false),
+					},
+				},
+			},
+			TerminationGracePeriodSeconds: &noGracePeriod,
+			Affinity: &corev1.Affinity{
+				PodAffinity: &corev1.PodAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+						corev1.PodAffinityTerm{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app":         common.LabelApp,
+									"name":        vm.Name,
+									"unique_name": podName,
+									"role":        common.LabelRoleVM,
+								},
+							},
+							TopologyKey: "kubernetes.io/hostname",
+						},
 					},
 				},
 			},

@@ -20,8 +20,8 @@ rules:
   - customresourcedefinitions
   verbs:
   - "*"
-- apiGroups: [""]
-  resources: ["pods", "nodes", "services"]
+- apiGroups: ["", "batch"]
+  resources: ["pods", "nodes", "services", "jobs"]
   verbs: ["*"]
 - apiGroups: ["vm.rancher.com"]
   resources: ["virtualmachines"]
@@ -132,6 +132,7 @@ spec:
         args:
         - -vm
         - -bridge-iface=ens33
+        - -v=4
       serviceAccountName: ranchervm-service-account
 ---
 apiVersion: apps/v1beta1
@@ -174,7 +175,7 @@ spec:
     port: 9500
   selector:
     app: ranchervm-backend
-  type: NodePort
+  type: ClusterIP
 ---
 apiVersion: apps/v1beta1
 kind: Deployment

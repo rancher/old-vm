@@ -36,6 +36,8 @@ gen_mac() {
 : ${MEMORY_MB:="128"}
 : ${CPUS:="1"}
 : ${MAC:=`gen_mac`}
+: ${MIGRATE:=false}
+: ${MIGRATE_PORT:=4444}
 
 : ${KVM_BLK_OPTS:="-drive file=\$KVM_IMAGE,if=none,id=drive-disk0,format=qcow2 \
 -device virtio-blk-pci,scsi=off,drive=drive-disk0,id=virtio-disk0,bootindex=1"}
@@ -262,7 +264,7 @@ echo allow $bridge_iface > /etc/qemu/bridge.conf
 # If /vm does not exist, we still proceed with running KVM. We just
 # won't get a VNC console socket.
 if [ -d /vm ]; then
-  sockpath="/vm/${MY_POD_NAMESPACE}_${MY_POD_NAME}.sock"
+  sockpath="/vm/${MY_POD_NAME}_vnc.sock"
   VNC="-vnc unix:$sockpath"
   echo VNC server will listen on Unix socket $sockpath
 fi
@@ -277,8 +279,8 @@ CI_ISO=cidata.iso
 cat > $USER_DATA << EOF
 #cloud-config
 preserve_hostname: False
-hostname: $MY_POD_NAME.$MY_POD_NAMESPACE
-fqdn: $MY_POD_NAME.$MY_POD_NAMESPACE.local
+hostname: $MY_VM_NAME.$MY_POD_NAMESPACE
+fqdn: $MY_VM_NAME.$MY_POD_NAMESPACE.local
 output: 
   all: ">> /var/log/cloud-init.log"
 ssh_authorized_keys:
@@ -287,11 +289,15 @@ for i in $(seq 1 $PUBLIC_KEY_COUNT); do
   eval echo "  - \$PUBLIC_KEY_$i" >> $USER_DATA
 done
 
-echo "instance-id: $INSTANCE_ID; local-hostname: $MY_POD_NAME" > $META_DATA
+echo "instance-id: $INSTANCE_ID; local-hostname: $MY_VM_NAME" > $META_DATA
 
 # Create CD-ROM ISO with cloud-init config
 echo "$(date -R) Generating ISO for cloud-init..."
 genisoimage -output $CI_ISO -volid cidata -joliet -r $USER_DATA $META_DATA &>> $1.log
+
+if [ "${MIGRATE}" == "true" ]; then
+  KVM_ARGS="${KVM_ARGS} -incoming tcp:0:${MIGRATE_PORT}"
+fi
 
 # Run as PID 1
 exec $LAUNCHER qemu-system-x86_64 \
@@ -299,7 +305,7 @@ exec $LAUNCHER qemu-system-x86_64 \
   -m size=$MEMORY_MB \
   -smp cpus=$CPUS \
   -cdrom $CI_ISO \
-  -qmp unix:/vm/monitor.sock,server,nowait \
+  -qmp unix:/vm/${MY_POD_NAME}_monitor.sock,server,nowait \
   $VNC \
   `eval echo $KVM_BLK_OPTS` \
   `eval echo $KVM_NET_OPTS` $KVM_ARGS

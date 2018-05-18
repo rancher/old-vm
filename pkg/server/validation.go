@@ -58,3 +58,8 @@ func isValidPublicKey(publicKey string) bool {
 func isValidInstanceCount(instanceCount int32) bool {
 	return instanceCount >= 1 && instanceCount <= 99
 }
+
+// TODO improve
+func isValidNodeName(nodeName string) bool {
+	return true
+}

@@ -82,7 +82,7 @@ func main() {
 			vmInformerFactory.Virtualmachine().V1alpha1().Credentials(),
 			*bridgeIface,
 			*noResourceLimits,
-		).Run(*workers, stopCh)
+		).Run()
 	}
 
 	if *ipCtrl {

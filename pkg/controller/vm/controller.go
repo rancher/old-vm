@@ -3,6 +3,7 @@ package vm
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -13,13 +14,18 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	batchinformers "k8s.io/client-go/informers/batch/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 
 	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
@@ -126,20 +132,68 @@ func NewVirtualMachineController(
 	return ctrl
 }
 
-func (ctrl *VirtualMachineController) Run(workers int, stopCh <-chan struct{}) {
-	defer ctrl.vmQueue.ShutDown()
+func HostnameOrDie() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		panic(err)
+	}
+	return hostname
+}
 
-	glog.Infof("Starting vm controller")
-	defer glog.Infof("Shutting down vm Controller")
+func (ctrl *VirtualMachineController) Run() {
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(glog.Infof)
+	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: typedcorev1.New(ctrl.kubeClient.Core().RESTClient()).Events("")})
+	recorder := eventBroadcaster.NewRecorder(runtime.NewScheme(), corev1.EventSource{Component: "ranchervm-controller"})
+
+	endpointLock, err := resourcelock.New(
+		resourcelock.EndpointsResourceLock,
+		"ranchervm-system",
+		"ranchervm-controller",
+		ctrl.kubeClient.CoreV1(),
+		resourcelock.ResourceLockConfig{
+			Identity:      HostnameOrDie(),
+			EventRecorder: recorder,
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	leaderelection.RunOrDie(leaderelection.LeaderElectionConfig{
+		Lock:          endpointLock,
+		LeaseDuration: 15 * time.Second,
+		RenewDeadline: 10 * time.Second,
+		RetryPeriod:   2 * time.Second,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: func(stop <-chan struct{}) {
+				glog.Info("started leading")
+				ctrl.run(stop)
+			},
+			OnStoppedLeading: func() {
+				glog.Info("stopped leading")
+			},
+			OnNewLeader: func(identity string) {
+				glog.Infof("new leader: %s", identity)
+			},
+		},
+	})
+}
+
+func (ctrl *VirtualMachineController) run(stopCh <-chan struct{}) {
+	defer ctrl.vmQueue.ShutDown()
+	defer ctrl.podQueue.ShutDown()
+	defer ctrl.jobQueue.ShutDown()
+
+	glog.Infof("starting vm controller")
+	defer glog.Infof("stopping vm controller")
 
 	if !cache.WaitForCacheSync(stopCh, ctrl.vmListerSynced, ctrl.podListerSynced,
 		ctrl.jobListerSynced, ctrl.svcListerSynced, ctrl.credListerSynced) {
 		return
 	}
 
-	for i := 0; i < workers; i++ {
-		go wait.Until(ctrl.vmWorker, time.Second, stopCh)
-	}
+	go wait.Until(ctrl.vmWorker, time.Second, stopCh)
 	go wait.Until(ctrl.podWorker, time.Second, stopCh)
 	go wait.Until(ctrl.jobWorker, time.Second, stopCh)
 

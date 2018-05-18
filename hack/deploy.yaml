@@ -21,7 +21,7 @@ rules:
   verbs:
   - "*"
 - apiGroups: ["", "batch"]
-  resources: ["pods", "nodes", "services", "jobs"]
+  resources: ["pods", "nodes", "services", "jobs", "endpoints"]
   verbs: ["*"]
 - apiGroups: ["vm.rancher.com"]
   resources: ["virtualmachines"]
@@ -109,13 +109,12 @@ metadata:
   name: ranchervm-controller
   namespace: ranchervm-system
 spec:
-  replicas: 1
+  replicas: 2
   template:
     metadata:
       labels:
         app: ranchervm-controller
     spec:
-      hostNetwork: true
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -132,7 +131,7 @@ spec:
         args:
         - -vm
         - -bridge-iface=ens33
-        - -v=4
+        - -v=3
       serviceAccountName: ranchervm-service-account
 ---
 apiVersion: apps/v1beta1
@@ -141,7 +140,7 @@ metadata:
   name: ranchervm-backend
   namespace: ranchervm-system
 spec:
-  replicas: 1
+  replicas: 2
   template:
     metadata:
       labels:
@@ -183,7 +182,7 @@ metadata:
   name: ranchervm-frontend
   namespace: ranchervm-system
 spec:
-  replicas: 1
+  replicas: 2
   template:
     metadata:
       labels:

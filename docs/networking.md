@@ -80,11 +80,12 @@ Running ifconfig on the host should give you something like this:
 
 Note IP address is now set on `br0`. And `eth0` and `br0` have the same MAC.
 
-You can now change Docker daemon to use `br0` instead of `docker0`:
+You will probably need to disable security restrictions related to network bridges.
+For Ubuntu 16.04 Xenial, run the following as root to disable L2 traffic filtering:
 
-    # service docker stop
-    # echo 'DOCKER_OPTS="-b=br0"' >> /etc/default/docker
-    # service docker start
+    for f in /proc/sys/net/bridge/*; do
+      echo 0 > $f
+    done
+    sysctl -p
 
-Now make sure to start RancherVMs with `NO_DHCP=true`, and the VMs will get their IP from host DHCP.
-
+The networking configuration for other Linux operating systems should be similar.

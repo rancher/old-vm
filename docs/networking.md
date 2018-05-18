@@ -80,12 +80,15 @@ Running ifconfig on the host should give you something like this:
 
 Note IP address is now set on `br0`. And `eth0` and `br0` have the same MAC.
 
-You will probably need to disable security restrictions related to network bridges.
-For Ubuntu 16.04 Xenial, run the following as root to disable L2 traffic filtering:
+You will need to disable packet filtering for bridge traffic. At the time of
+writing, there is no _correct_ way to persist bridge netfilter settings across
+reboot. Merely setting them in `/etc/sysctl.conf` doesn't work due to a timing
+issue. See [this document](https://wiki.libvirt.org/page/Net.bridge.bridge-nf-call_and_sysctl.conf) for more information and possible solutions.
+If you just want a quick solution, dumping the following into `/etc/rc.local`
+will probably work:
 
-    for f in /proc/sys/net/bridge/*; do
-      echo 0 > $f
-    done
+    modprobe br_netfilter
+    echo 0 > /proc/sys/net/bridge/bridge-nf-call-arptables
+    echo 0 > /proc/sys/net/bridge/bridge-nf-call-iptables
+    echo 0 > /proc/sys/net/bridge/bridge-nf-call-ip6tables 
     sysctl -p
-
-The networking configuration for other Linux operating systems should be similar.

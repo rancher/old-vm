@@ -20,7 +20,7 @@ After you have installed the operating system in a `qcow2` file and created
 a file like `myos.img`, run the `qemu-img convert` command to compress the image.
 For example:
 
-    qemu-img convert -O qcow2 -c myos.img myos.gz.img
+    qemu-img convert -O qcow2 -c myos.img myos.qcow2
 
 Image compression can lead to over 50% size reduction.
 
@@ -32,7 +32,7 @@ The following, for example, is the Dockerfile for building RancherOS
 VM:
 
     FROM scratch
-    COPY rancheros-0.3.0-gz.img /base_image/rancheros-0.3.0-gz.img
+    COPY rancheros-0.3.0.qcow2 /base_image/rancheros-0.3.0.qcow2
 
 You can give the `qcow2` image any name you want. The `qcow2` image must be
 copied into the `/base_image` directory. There must be exactly one image file

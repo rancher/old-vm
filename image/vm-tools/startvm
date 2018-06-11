@@ -31,7 +31,8 @@ gen_mac() {
 }
 
 # These variables can be overwritten
-: ${IFACE:="eth0"}
+IFACE=$(ls /sys/class/net/ | grep -e '^e' | head -1)
+# : ${IFACE:="eth0"}
 : ${BRIDGE_IFACE:="br0"}
 : ${MEMORY_MB:="128"}
 : ${CPUS:="1"}

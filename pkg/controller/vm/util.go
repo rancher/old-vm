@@ -66,9 +66,16 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 		FailureThreshold:    10,
 	}
 
+	var imageName string
+	if strings.Contains(string(vm.Spec.MachineImage), "/") {
+		imageName = string(vm.Spec.MachineImage)
+	} else {
+		imageName = fmt.Sprintf(common.ImageVMPrefix, string(vm.Spec.MachineImage))
+	}
+
 	vmContainer := corev1.Container{
 		Name:            common.LabelRoleVM,
-		Image:           fmt.Sprintf(common.ImageVMPrefix, string(vm.Spec.MachineImage)),
+		Image:           imageName,
 		ImagePullPolicy: corev1.PullAlways,
 		Command:         []string{"/usr/bin/startvm"},
 		Env: []corev1.EnvVar{

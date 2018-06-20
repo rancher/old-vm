@@ -1,7 +1,12 @@
 ---
-- hosts: "all"
-  sudo: "yes"
-  remote_user: "vagrant"
+- hosts: all
+  sudo: yes
+  remote_user: vagrant
+  # gather_facts: False
+  # pre_tasks:
+  # - name: Install python
+  #   raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
+
   tasks:
   - name: Set distribution facts
     set_fact:

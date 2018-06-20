@@ -68,7 +68,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 
 	vmContainer := corev1.Container{
 		Name:            common.LabelRoleVM,
-		Image:           fmt.Sprintf(common.ImageVMPrefix, string(vm.Spec.MachineImage)),
+		Image:           image,
 		ImagePullPolicy: corev1.PullAlways,
 		Command:         []string{"/usr/bin/startvm"},
 		Env: []corev1.EnvVar{

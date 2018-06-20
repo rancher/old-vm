@@ -7,10 +7,9 @@ const (
 	NamespaceVM       = "default"
 	NameDelimiter     = "-"
 
-	ImageVM       = "rancher/vm"
-	ImageVMPrefix = "rancher/vm-%s"
-	ImageVMTools  = "rancher/vm-tools"
-	ImageNoVNC    = "rancher/novnc"
+	ImageVM      = "rancher/vm"
+	ImageVMTools = "rancher/vm-tools"
+	ImageNoVNC   = "rancher/novnc"
 
 	RancherOUI = "06:fe"
 

@@ -5,7 +5,8 @@ metadata:
 spec:
   action: start
   cpus: 1
+  hosted_novnc: true
   memory_mb: 512
-  image: ubuntu:16.04.4-server-amd64
+  image: rancher/vm-ubuntu:16.04.4-server-amd64
   public_keys:
   - james

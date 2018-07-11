@@ -45,7 +45,6 @@ subjects:
 - kind: ServiceAccount
   name: ranchervm-service-account
   namespace: ranchervm-system
----
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
@@ -106,14 +105,14 @@ spec:
 apiVersion: apps/v1beta1
 kind: Deployment
 metadata:
-  name: ranchervm-controller
+  name: vm-controller
   namespace: ranchervm-system
 spec:
   replicas: 2
   template:
     metadata:
       labels:
-        app: ranchervm-controller
+        app: vm-controller
     spec:
       affinity:
         podAntiAffinity:
@@ -122,10 +121,10 @@ spec:
               matchExpressions:
               - key: app
                 operator: In
-                values: ["ranchervm-controller"]
+                values: ["vm-controller"]
             topologyKey: "kubernetes.io/hostname"
       containers:
-      - name: ranchervm-controller
+      - name: vm-controller
         image: rancher/vm
         imagePullPolicy: Always
         args:
@@ -137,109 +136,33 @@ spec:
 apiVersion: apps/v1beta1
 kind: Deployment
 metadata:
-  name: ranchervm-backend
-  namespace: ranchervm-system
-spec:
-  replicas: 2
-  template:
-    metadata:
-      labels:
-        app: ranchervm-backend
-    spec:
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values: ["ranchervm-backend"]
-            topologyKey: "kubernetes.io/hostname"
-      containers:
-      - name: ranchervm-backend
-        image: rancher/vm
-        imagePullPolicy: Always
-        args:
-        - -backend
-      serviceAccountName: ranchervm-service-account
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: ranchervm-backend
-  namespace: ranchervm-system
-spec:
-  ports:
-  - name: api
-    port: 9500
-  selector:
-    app: ranchervm-backend
-  type: ClusterIP
----
-apiVersion: apps/v1beta1
-kind: Deployment
-metadata:
-  name: ranchervm-frontend
-  namespace: ranchervm-system
-spec:
-  replicas: 2
-  template:
-    metadata:
-      labels:
-        app: ranchervm-frontend
-    spec:
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values: ["ranchervm-frontend"]
-            topologyKey: "kubernetes.io/hostname"
-      containers:
-      - name: ranchervm-frontend
-        image: rancher/vm-frontend
-        imagePullPolicy: Always
-        env:
-        - name: LONGHORN_MANAGER_IP
-          value: "http://ranchervm-backend:9500"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: ranchervm-frontend
-  namespace: ranchervm-system
-spec:
-  ports:
-  - name: ui
-    port: 8000
-  selector:
-    app: ranchervm-frontend
-  type: NodePort
----
-apiVersion: apps/v1beta2
-kind: DaemonSet
-metadata:
   name: ip-controller
   namespace: ranchervm-system
 spec:
-  selector:
-    matchLabels:
-      app: ip-controller
+  replicas: 2
   template:
     metadata:
       labels:
         app: ip-controller
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values: ["ip-controller"]
+            topologyKey: "kubernetes.io/hostname"
       hostNetwork: true
       containers:
       - name: ip-controller
         image: rancher/vm
         imagePullPolicy: Always
-        command: [ "sh", "-c"]
         args:
-        - exec /ranchervm -ip -nodename ${MY_NODE_NAME} -v 3
+        - -ip
+        - -nodename=${MY_NODE_NAME}
+        - -v=3
         env:
         - name: MY_NODE_NAME
           valueFrom:
@@ -262,3 +185,85 @@ spec:
             sleep 5;
           done
       serviceAccountName: ranchervm-service-account
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: ranchervm-system
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values: ["backend"]
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: backend
+        image: rancher/vm
+        imagePullPolicy: Always
+        args:
+        - -backend
+      serviceAccountName: ranchervm-service-account
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: ranchervm-system
+spec:
+  ports:
+  - name: api
+    port: 9500
+  selector:
+    app: backend
+  type: ClusterIP
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: ranchervm-system
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values: ["frontend"]
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: frontend
+        image: rancher/vm-frontend
+        imagePullPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: ranchervm-system
+spec:
+  ports:
+  - name: ui
+    port: 80
+    targetPort: 8000
+  selector:
+    app: frontend
+  type: LoadBalancer

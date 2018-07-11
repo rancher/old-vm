@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
@@ -15,6 +16,37 @@ import (
 	vmlisters "github.com/rancher/vm/pkg/client/listers/virtualmachine/v1alpha1"
 )
 
+type SimpleResourceEventHandler struct{ ChangeFunc func() }
+
+func (s SimpleResourceEventHandler) OnAdd(obj interface{})               { s.ChangeFunc() }
+func (s SimpleResourceEventHandler) OnUpdate(oldObj, newObj interface{}) { s.ChangeFunc() }
+func (s SimpleResourceEventHandler) OnDelete(obj interface{})            { s.ChangeFunc() }
+
+type Watcher struct {
+	eventChan chan struct{}
+	resources []string
+	server    *server
+}
+
+func (w *Watcher) Events() <-chan struct{} {
+	return w.eventChan
+}
+
+func (w *Watcher) Close() {
+	s := w.server
+	s.watcherLock.Lock()
+	defer s.watcherLock.Unlock()
+
+	close(w.eventChan)
+	for i, watcher := range s.watchers {
+		if watcher == w {
+			s.watchers = append(s.watchers[:i], s.watchers[i+1:]...)
+			return
+		}
+	}
+	glog.Warningf("failed to remove from watchers: %+v", w)
+}
+
 type server struct {
 	vmClient   vmclientset.Interface
 	kubeClient kubernetes.Interface
@@ -27,6 +59,8 @@ type server struct {
 	credListerSynced cache.InformerSynced
 
 	listenAddress string
+	watchers      []*Watcher
+	watcherLock   sync.Mutex
 }
 
 func NewServer(
@@ -38,7 +72,7 @@ func NewServer(
 	listenAddress string,
 ) *server {
 
-	return &server{
+	s := &server{
 		vmClient:   vmClient,
 		kubeClient: kubeClient,
 
@@ -50,7 +84,14 @@ func NewServer(
 		credListerSynced: credInformer.Informer().HasSynced,
 
 		listenAddress: listenAddress,
+		watchers:      []*Watcher{},
 	}
+
+	vmInformer.Informer().AddEventHandler(s.notifyWatchersHandler("virtualmachine"))
+	nodeInformer.Informer().AddEventHandler(s.notifyWatchersHandler("node"))
+	credInformer.Informer().AddEventHandler(s.notifyWatchersHandler("credential"))
+
+	return s
 }
 
 func (s *server) Run(stopCh <-chan struct{}) {
@@ -63,6 +104,43 @@ func (s *server) Run(stopCh <-chan struct{}) {
 	go http.ListenAndServe(s.listenAddress, r)
 
 	<-stopCh
+}
+
+func (s *server) NewWatcher(resources ...string) *Watcher {
+	s.watcherLock.Lock()
+	defer s.watcherLock.Unlock()
+
+	w := &Watcher{
+		eventChan: make(chan struct{}, 2),
+		resources: resources,
+		server:    s,
+	}
+	s.watchers = append(s.watchers, w)
+	return w
+}
+
+func (s *server) notifyWatchersHandler(resource string) cache.ResourceEventHandler {
+	return SimpleResourceEventHandler{
+		ChangeFunc: s.notifyWatchersFunc(resource),
+	}
+}
+
+func (s *server) notifyWatchersFunc(resource string) func() {
+	return func() {
+		s.watcherLock.Lock()
+		defer s.watcherLock.Unlock()
+		for _, w := range s.watchers {
+			for _, r := range w.resources {
+				if r == resource {
+					select {
+					case w.eventChan <- struct{}{}:
+					default:
+					}
+					break
+				}
+			}
+		}
+	}
 }
 
 func (s *server) newRouter() *mux.Router {
@@ -81,5 +159,24 @@ func (s *server) newRouter() *mux.Router {
 	r.Methods("GET").Path("/v1/credential").Handler(http.HandlerFunc(s.CredentialList))
 	r.Methods("POST").Path("/v1/credential").Handler(http.HandlerFunc(s.CredentialCreate))
 	r.Methods("DELETE").Path("/v1/credential/{name}").Handler(http.HandlerFunc(s.CredentialDelete))
+
+	instanceWatcher := s.NewWatcher("virtualmachine")
+	defer instanceWatcher.Close()
+	instanceListStream := NewStreamHandlerFunc(instanceWatcher, s.instanceList)
+	r.Path("/v1/ws/instances").Handler(http.HandlerFunc(instanceListStream))
+	r.Path("/v1/ws/{period}/instances").Handler(http.HandlerFunc(instanceListStream))
+
+	nodeWatcher := s.NewWatcher("node")
+	defer nodeWatcher.Close()
+	nodeListStream := NewStreamHandlerFunc(nodeWatcher, s.nodeList)
+	r.Path("/v1/ws/host").Handler(http.HandlerFunc(nodeListStream))
+	r.Path("/v1/ws/{period}/host").Handler(http.HandlerFunc(nodeListStream))
+
+	credentialWatcher := s.NewWatcher("credential")
+	defer credentialWatcher.Close()
+	credentialListStream := NewStreamHandlerFunc(credentialWatcher, s.credentialList)
+	r.Path("/v1/ws/credential").Handler(http.HandlerFunc(credentialListStream))
+	r.Path("/v1/ws/{period}/credential").Handler(http.HandlerFunc(credentialListStream))
+
 	return r
 }

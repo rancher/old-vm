@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/golang/glog"
@@ -21,17 +22,18 @@ type InstanceList struct {
 	Instances []*vmapi.VirtualMachine `json:"data"`
 }
 
+func (l InstanceList) Len() int           { return len(l.Instances) }
+func (l InstanceList) Less(i, j int) bool { return l.Instances[i].Name < l.Instances[j].Name }
+func (l InstanceList) Swap(i, j int)      { l.Instances[i], l.Instances[j] = l.Instances[j], l.Instances[i] }
+
 func (s *server) InstanceList(w http.ResponseWriter, r *http.Request) {
-	vms, err := s.vmLister.List(labels.Everything())
+	list, err := s.instanceList()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	resp, err := json.Marshal(InstanceList{
-		Instances: vms,
-	})
-
+	resp, err := json.Marshal(list)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -39,6 +41,20 @@ func (s *server) InstanceList(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(resp)
+}
+
+func (s *server) instanceList() (interface{}, error) {
+	vms, err := s.vmLister.List(labels.Everything())
+	if err != nil {
+		return []byte{}, err
+	}
+
+	list := InstanceList{
+		Instances: vms,
+	}
+	sort.Sort(list)
+
+	return list, nil
 }
 
 type Instance struct {

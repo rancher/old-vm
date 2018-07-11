@@ -1,0 +1,21 @@
+---
+- name: Enable Docker service
+  service:
+    name: docker
+    enabled: yes
+  notify: restart docker
+  register: docker_service
+  become: yes
+
+- name: Trigger start/restart of Docker
+  service:
+    name: docker
+  notify: restart docker
+  changed_when: docker_service.status.SubState != "running"
+  when: docker_service.status is defined
+
+- name: Adding user vagrant to group docker
+  user: 
+    append: yes
+    group: docker
+    name: vagrant

@@ -1,0 +1,35 @@
+---
+- hosts: all
+  sudo: yes
+  remote_user: vagrant
+  # gather_facts: False
+  # pre_tasks:
+  # - name: Install python
+  #   raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
+
+  tasks:
+  - name: Set distribution facts
+    set_fact:
+      _docker_os_dist: "{{ ansible_distribution }}"
+      _docker_os_dist_release: "{{ ansible_distribution_release }}"
+      _docker_os_dist_major_version: "{{ ansible_distribution_major_version }}"
+      _docker_os_dist_check: yes
+    tags: ["install", "configure"]
+
+  - include: setup-repository.yaml
+    tags: ["install"]
+
+  - include: install-docker.yaml
+    tags: ["install"]
+
+  - include: configure-docker.yaml
+    tags: ["configure"]
+
+  - name: "Install KVM and NFS"
+    apt:
+      state: "present"
+      update_cache: "yes"
+      name: "{{ item }}"
+    with_items:
+      - qemu-kvm
+      - nfs-kernel-server

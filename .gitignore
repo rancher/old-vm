@@ -1,1 +1,7 @@
 bin/
+.vagrant/
+
+# RKE
+cluster*.yaml
+inventory*
+kube_config_cluster*

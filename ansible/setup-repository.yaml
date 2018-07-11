@@ -1,0 +1,34 @@
+---
+- name: Update APT cache
+  apt:
+    update_cache: yes
+  become: true
+
+- name: Ensure packages are installed for repository setup
+  package:
+    name: "{{ item }}"
+    state: present
+  with_items:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - software-properties-common
+  become: true
+
+- name: Add Docker’s official GPG key
+  apt_key:
+    url: https://download.docker.com/linux/{{ _docker_os_dist|lower }}/gpg
+    state: present
+  become: true
+
+- name: Add Docker CE repository
+  apt_repository:
+    repo: deb [arch=amd64] https://download.docker.com/linux/{{ _docker_os_dist|lower }} {{ _docker_os_dist_release }} stable
+    state: present
+    filename: 'docker-ce'
+  become: true
+
+- name: Update APT cache
+  apt:
+    update_cache: yes
+  become: true

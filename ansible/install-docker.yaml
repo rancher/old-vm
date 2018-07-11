@@ -1,0 +1,13 @@
+---
+- name: Ensure docker-ce is installed
+  apt:
+    name: docker-ce=17.03.2~*
+    state: present
+  become: true
+
+- name: restart docker
+  service:
+    name: docker
+    state: restarted
+  become: yes
+  tags: ["install", "configure"]

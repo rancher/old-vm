@@ -1,0 +1,12 @@
+---
+- name: Create shared directory on NFS server
+  file:
+    path: /var/lib/rancher/vm-shared
+    state: directory
+    mode: 0755
+
+- name: Create mount directory on clients
+  file:
+    path: /var/lib/rancher/vm
+    state: directory
+    mode: 0755

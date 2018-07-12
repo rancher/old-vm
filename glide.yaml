@@ -6,3 +6,4 @@ import:
   version: release-1.8
 - package: k8s.io/client-go
   version: release-5.0
+- package: github.com/gorilla/websocket

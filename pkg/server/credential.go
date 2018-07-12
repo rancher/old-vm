@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -18,17 +19,20 @@ type CredentialList struct {
 	Credentials []*vmapi.Credential `json:"data"`
 }
 
+func (l CredentialList) Len() int           { return len(l.Credentials) }
+func (l CredentialList) Less(i, j int) bool { return l.Credentials[i].Name < l.Credentials[j].Name }
+func (l CredentialList) Swap(i, j int) {
+	l.Credentials[i], l.Credentials[j] = l.Credentials[j], l.Credentials[i]
+}
+
 func (s *server) CredentialList(w http.ResponseWriter, r *http.Request) {
-	creds, err := s.credLister.List(labels.Everything())
+	list, err := s.credentialList()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	resp, err := json.Marshal(CredentialList{
-		Credentials: creds,
-	})
-
+	resp, err := json.Marshal(list)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -36,6 +40,20 @@ func (s *server) CredentialList(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(resp)
+}
+
+func (s *server) credentialList() (interface{}, error) {
+	creds, err := s.credLister.List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+
+	list := CredentialList{
+		Credentials: creds,
+	}
+	sort.Sort(list)
+
+	return list, nil
 }
 
 type CredentialCreate struct {

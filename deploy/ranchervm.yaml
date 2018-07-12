@@ -160,10 +160,9 @@ spec:
       - name: ip-controller
         image: rancher/vm
         imagePullPolicy: Always
+        command: [ "sh", "-c"]
         args:
-        - -ip
-        - -nodename=${MY_NODE_NAME}
-        - -v=3
+        - exec /ranchervm -ip -nodename ${MY_NODE_NAME} -v 3
         env:
         - name: MY_NODE_NAME
           valueFrom:

@@ -5,6 +5,3 @@
 - name: kvm-02
   ram: "4096"
   vcpu: "4"
-- name: kvm-03
-  ram: "4096"
-  vcpu: "4"

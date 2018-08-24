@@ -126,12 +126,15 @@ spec:
             topologyKey: "kubernetes.io/hostname"
       containers:
       - name: vm-controller
-        image: rancher/vm
+        image: rancher/vm:v0.1.0
         imagePullPolicy: Always
         args:
         - -vm
         - -bridge-iface=ens33
         - -v=3
+        - -image-novnc=rancher/vm-novnc:v0.1.0
+        - -image-tools=rancher/vm-tools:v0.1.0
+        - -image-vm=rancher/vm:v0.1.0
       serviceAccountName: ranchervm-service-account
 ---
 apiVersion: apps/v1beta1
@@ -158,7 +161,7 @@ spec:
       hostNetwork: true
       containers:
       - name: ip-controller
-        image: rancher/vm
+        image: rancher/vm:v0.1.0
         imagePullPolicy: Always
         command: [ "sh", "-c"]
         args:
@@ -169,7 +172,7 @@ spec:
             fieldRef:
               fieldPath: spec.nodeName
       - name: arp-scanner
-        image: rancher/vm
+        image: rancher/vm:v0.1.0
         imagePullPolicy: Always
         command: [ "bash", "-c"]
         # This is probably too aggressive for anything bigger than class 3 network
@@ -209,7 +212,7 @@ spec:
             topologyKey: "kubernetes.io/hostname"
       containers:
       - name: backend
-        image: rancher/vm
+        image: rancher/vm:v0.1.0
         imagePullPolicy: Always
         args:
         - -backend
@@ -251,7 +254,7 @@ spec:
             topologyKey: "kubernetes.io/hostname"
       containers:
       - name: frontend
-        image: rancher/vm-frontend
+        image: rancher/vm-frontend:v0.1.0
         imagePullPolicy: Always
 ---
 apiVersion: v1

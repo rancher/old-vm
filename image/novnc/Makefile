@@ -1,5 +1,5 @@
-NAME = rancher/novnc
-VERSION = 0.0.1
+NAME = rancher/vm-novnc
+VERSION = v0.1.0
 
 .PHONY : all clean build
 

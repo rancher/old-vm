@@ -1,5 +1,5 @@
 NAME = rancher/vm-tools
-VERSION = 0.0.3
+VERSION = v0.1.0
 BASE_IMAGE=RancherVM-debootstrap-ubuntu-1604.tgz
 
 .PHONY : all clean build

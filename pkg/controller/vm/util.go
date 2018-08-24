@@ -155,7 +155,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			InitContainers: []corev1.Container{
 				corev1.Container{
 					Name:            "debootstrap",
-					Image:           common.ImageVMTools,
+					Image:           *common.ImageVMTools,
 					ImagePullPolicy: corev1.PullAlways,
 					VolumeMounts: []corev1.VolumeMount{
 						common.MakeVolumeMount("vm-fs", "/vm-tools", "", false),
@@ -274,7 +274,7 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 			Containers: []corev1.Container{
 				corev1.Container{
 					Name:            common.LabelRoleNoVNC,
-					Image:           common.ImageNoVNC,
+					Image:           *common.ImageNoVNC,
 					ImagePullPolicy: corev1.PullAlways,
 					Command:         []string{"novnc"},
 					Env: []corev1.EnvVar{

@@ -1,15 +1,15 @@
 package common
 
+import (
+	"flag"
+)
+
 const (
 	HostStateBaseDir = "/var/lib/rancher/vm"
 
 	FinalizerDeletion = "deletion.vm.rancher.io"
 	NamespaceVM       = "default"
 	NameDelimiter     = "-"
-
-	ImageVM      = "rancher/vm"
-	ImageVMTools = "rancher/vm-tools"
-	ImageNoVNC   = "rancher/novnc"
 
 	RancherOUI = "06:fe"
 
@@ -18,4 +18,10 @@ const (
 	LabelRoleVM       = "vm"
 	LabelRoleNoVNC    = "novnc"
 	LabelNodeHostname = "kubernetes.io/hostname"
+)
+
+var (
+	ImageVM      = flag.String("image-vm", "rancher/vm:latest", "VM Docker Image")
+	ImageNoVNC   = flag.String("image-novnc", "rancher/vm-novnc:latest", "NoVNC Docker Image")
+	ImageVMTools = flag.String("image-tools", "rancher/vm-tools:latest", "Tools Docker Image")
 )

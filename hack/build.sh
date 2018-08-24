@@ -3,8 +3,24 @@
 IMAGE=${IMAGE:-no}
 REPO=${REPO:-rancher}
 NAME=vm
-TAG=dev
 
+version() {
+  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    DIRTY="-dirty"
+  fi
+
+  COMMIT=$(git rev-parse --short HEAD)
+  GIT_TAG=$(git tag -l --contains HEAD | head -n 1)
+
+  if [[ -z "$DIRTY" && -n "$GIT_TAG" ]]; then
+      VER=$GIT_TAG
+  else
+      VER="${COMMIT}${DIRTY}"
+  fi
+
+  echo ${VER}
+}
+TAG=`version`
 IMAGE_NAME=${REPO}/${NAME}:${TAG}
 
 if [ "$IMAGE" == "no" ]; then

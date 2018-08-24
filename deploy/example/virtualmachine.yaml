@@ -1,4 +1,4 @@
-apiVersion: vm.rancher.com/v1alpha1
+apiVersion: vm.rancher.io/v1alpha1
 kind: VirtualMachine
 metadata:
   name: example-ubuntu

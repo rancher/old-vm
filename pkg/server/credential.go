@@ -104,7 +104,7 @@ func (s *server) CredentialCreate(w http.ResponseWriter, r *http.Request) {
 	cred := &vmapi.Credential{
 		// I shouldn't have to set the type meta, what's wrong with the client?
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "vm.rancher.com/v1alpha1",
+			APIVersion: "vm.rancher.io/v1alpha1",
 			Kind:       "Credential",
 		},
 		ObjectMeta: metav1.ObjectMeta{

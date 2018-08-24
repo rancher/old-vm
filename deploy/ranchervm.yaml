@@ -23,13 +23,13 @@ rules:
 - apiGroups: ["", "batch"]
   resources: ["pods", "nodes", "services", "jobs", "endpoints"]
   verbs: ["*"]
-- apiGroups: ["vm.rancher.com"]
+- apiGroups: ["vm.rancher.io"]
   resources: ["virtualmachines"]
   verbs: ["*"]
-- apiGroups: ["vm.rancher.com"]
+- apiGroups: ["vm.rancher.io"]
   resources: ["arptables"]
   verbs: ["*"]
-- apiGroups: ["vm.rancher.com"]
+- apiGroups: ["vm.rancher.io"]
   resources: ["credentials"]
   verbs: ["*"]
 ---
@@ -51,9 +51,9 @@ kind: CustomResourceDefinition
 metadata:
   labels:
     ranchervm-system: VirtualMachine
-  name: virtualmachines.vm.rancher.com
+  name: virtualmachines.vm.rancher.io
 spec:
-  group: vm.rancher.com
+  group: vm.rancher.io
   version: v1alpha1
   names:
     kind: VirtualMachine
@@ -70,9 +70,9 @@ kind: CustomResourceDefinition
 metadata:
   labels:
     ranchervm-system: ARPTable
-  name: arptables.vm.rancher.com
+  name: arptables.vm.rancher.io
 spec:
-  group: vm.rancher.com
+  group: vm.rancher.io
   version: v1alpha1
   names:
     kind: ARPTable
@@ -89,9 +89,9 @@ kind: CustomResourceDefinition
 metadata:
   labels:
     ranchervm-system: Credential
-  name: credentials.vm.rancher.com
+  name: credentials.vm.rancher.io
 spec:
-  group: vm.rancher.com
+  group: vm.rancher.io
   version: v1alpha1
   names:
     kind: Credential

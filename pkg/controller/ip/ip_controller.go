@@ -126,7 +126,7 @@ func (ctrl *IPDiscoveryController) updateARPTable() {
 	newTable := &vmapi.ARPTable{
 		// I shouldn't have to set the type meta, what's wrong with the client?
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "vm.rancher.com/v1alpha1",
+			APIVersion: "vm.rancher.io/v1alpha1",
 			Kind:       "ARPTable",
 		},
 		ObjectMeta: metav1.ObjectMeta{

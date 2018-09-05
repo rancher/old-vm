@@ -308,4 +308,4 @@ exec $LAUNCHER qemu-system-x86_64 \
   -qmp unix:/vm/${MY_POD_NAME}_monitor.sock,server,nowait \
   $VNC \
   `eval echo $KVM_BLK_OPTS` \
-  `eval echo $KVM_NET_OPTS` $KVM_ARGS
+  `eval echo $KVM_NET_OPTS` $KVM_ARGS $KVM_EXTRA_ARGS

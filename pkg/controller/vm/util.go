@@ -37,6 +37,7 @@ var privileged = true
 
 func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {
 	var publicKeys []*v1alpha1.Credential
+        var imagevmtools string
 	for _, publicKeyName := range vm.Spec.PublicKeys {
 		publicKey, err := ctrl.credLister.Get(publicKeyName)
 		if err != nil {
@@ -48,6 +49,14 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 	cpu := strconv.Itoa(int(vm.Spec.Cpus))
 	mem := strconv.Itoa(int(vm.Spec.MemoryMB))
 	image := string(vm.Spec.MachineImage)
+        kvmextraargs := string(vm.Spec.KvmArgs)
+
+        if (vm.Spec.ImageVMTools == "" ) {
+                imagevmtools = *common.ImageVMTools
+        } else {
+                imagevmtools = vm.Spec.ImageVMTools
+        }
+
 
 	vncProbe := &corev1.Probe{
 		Handler: corev1.Handler{
@@ -75,6 +84,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			common.MakeEnvVarFieldPath("MY_POD_NAME", "metadata.name"),
 			common.MakeEnvVarFieldPath("MY_POD_NAMESPACE", "metadata.namespace"),
 			common.MakeEnvVar("IFACE", iface, nil),
+                        common.MakeEnvVar("KVM_EXTRA_ARGS", kvmextraargs, nil),
 			common.MakeEnvVar("MEMORY_MB", mem, nil),
 			common.MakeEnvVar("CPUS", cpu, nil),
 			common.MakeEnvVar("MAC", vm.Status.MAC, nil),
@@ -155,7 +165,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			InitContainers: []corev1.Container{
 				corev1.Container{
 					Name:            "debootstrap",
-					Image:           *common.ImageVMTools,
+                                        Image:           imagevmtools,
 					ImagePullPolicy: corev1.PullAlways,
 					VolumeMounts: []corev1.VolumeMount{
 						common.MakeVolumeMount("vm-fs", "/vm-tools", "", false),

@@ -1,4 +1,4 @@
-NAME = rancher/vm-tools
+NAME = nsonetwork30/vm-tools
 VERSION = v0.1.0
 BASE_IMAGE=RancherVM-debootstrap-ubuntu-1604.tgz
 

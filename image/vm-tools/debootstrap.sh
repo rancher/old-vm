@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-TARGET_ROOTFS_DIR=/tmp/rootfs/RancherVM-debootstrap-ubuntu-1604
+TARGET_ROOTFS_DIR=/tmp/rootfs/RancherVM-debootstrap-ubuntu-1804
 mkdir -p ${TARGET_ROOTFS_DIR}
 
 INCLUDE_PKGS="vim,qemu-kvm,qemu-utils,bridge-utils,genisoimage,curl,net-tools"
@@ -9,7 +9,7 @@ debootstrap \
   --arch=amd64 \
   --variant=minbase \
   --include="${INCLUDE_PKGS}" \
-  xenial \
+  bionic \
   ${TARGET_ROOTFS_DIR} \
   http://archive.ubuntu.com/ubuntu/
 

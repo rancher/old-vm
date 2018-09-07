@@ -95,6 +95,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 		VolumeMounts: []corev1.VolumeMount{
 			common.MakeVolumeMount("vm-image", "/image", "", false),
 			common.MakeVolumeMount("dev-kvm", "/dev/kvm", "", false),
+			common.MakeVolumeMount("dev-hugepages", "/dev/hugepages", "", false),
 			common.MakeVolumeMount("vm-socket", "/vm", "", false),
 			common.MakeVolumeMount("vm-fs", "/bin", "bin", true),
 			// kubernetes mounts /etc/hosts, /etc/hostname, /etc/resolv.conf
@@ -161,6 +162,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 				common.MakeHostStateVol(vm.Name, "vm-image"),
 				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, vm.Name)),
 				common.MakeVolHostPath("dev-kvm", "/dev/kvm"),
+				common.MakeVolHostPath("dev-hugepages", "/dev/hugepages"),
 			},
 			InitContainers: []corev1.Container{
 				corev1.Container{

@@ -1,6 +1,6 @@
 NAME = nsonetwork30/vm-tools
 VERSION = v0.1.0
-BASE_IMAGE=RancherVM-debootstrap-ubuntu-1604.tgz
+BASE_IMAGE=RancherVM-debootstrap-ubuntu-1804.tgz
 
 .PHONY : all clean build
 

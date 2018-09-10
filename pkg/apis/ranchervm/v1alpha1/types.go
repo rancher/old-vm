@@ -50,6 +50,7 @@ type VirtualMachineSpec struct {
 	NodeName string `json:"node_name"`
         KvmArgs string `json:"kvm_extra_args"`
         ImageVMTools string `json:"image_vmtools"`
+        UseHugePages bool `json:"use_hugepages"`
 
 }
 

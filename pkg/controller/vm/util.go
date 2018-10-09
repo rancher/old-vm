@@ -37,6 +37,8 @@ var privileged = true
 
 func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {
 	var publicKeys []*v1alpha1.Credential
+        var imagevmtools string
+        var hugepagesvolume corev1.Volume
 	for _, publicKeyName := range vm.Spec.PublicKeys {
 		publicKey, err := ctrl.credLister.Get(publicKeyName)
 		if err != nil {
@@ -48,6 +50,13 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 	cpu := strconv.Itoa(int(vm.Spec.Cpus))
 	mem := strconv.Itoa(int(vm.Spec.MemoryMB))
 	image := string(vm.Spec.MachineImage)
+        kvmextraargs := string(vm.Spec.KvmArgs)
+
+        if (vm.Spec.ImageVMTools == "" ) {
+                imagevmtools = *common.ImageVMTools
+        } else {
+                imagevmtools = vm.Spec.ImageVMTools
+        }
 
 	vncProbe := &corev1.Probe{
 		Handler: corev1.Handler{
@@ -75,6 +84,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			common.MakeEnvVarFieldPath("MY_POD_NAME", "metadata.name"),
 			common.MakeEnvVarFieldPath("MY_POD_NAMESPACE", "metadata.namespace"),
 			common.MakeEnvVar("IFACE", iface, nil),
+                        common.MakeEnvVar("KVM_EXTRA_ARGS", kvmextraargs, nil),
 			common.MakeEnvVar("MEMORY_MB", mem, nil),
 			common.MakeEnvVar("CPUS", cpu, nil),
 			common.MakeEnvVar("MAC", vm.Status.MAC, nil),
@@ -85,6 +95,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 		VolumeMounts: []corev1.VolumeMount{
 			common.MakeVolumeMount("vm-image", "/image", "", false),
 			common.MakeVolumeMount("dev-kvm", "/dev/kvm", "", false),
+			common.MakeVolumeMount("hugepages", "/hugepages", "", false),
 			common.MakeVolumeMount("vm-socket", "/vm", "", false),
 			common.MakeVolumeMount("vm-fs", "/bin", "bin", true),
 			// kubernetes mounts /etc/hosts, /etc/hostname, /etc/resolv.conf
@@ -106,15 +117,30 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 	}
 
 	if !noResourceLimits {
-		vmContainer.Resources = corev1.ResourceRequirements{
-			Limits: map[corev1.ResourceName]resource.Quantity{
-				// CPU, in cores. (500m = .5 cores)
-				corev1.ResourceCPU: *resource.NewQuantity(int64(vm.Spec.Cpus), resource.BinarySI),
-				// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
-				corev1.ResourceMemory: *resource.NewQuantity(int64(vm.Spec.MemoryMB)*1024*1024, resource.BinarySI),
-				// Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
-				// corev1.ResourceStorage: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
-			},
+		if vm.Spec.UseHugePages {
+			vmContainer.Resources = corev1.ResourceRequirements{
+				Limits: map[corev1.ResourceName]resource.Quantity{
+					// CPU, in cores. (500m = .5 cores)
+					corev1.ResourceCPU: *resource.NewQuantity(int64(vm.Spec.Cpus), resource.BinarySI),
+					// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+					corev1.ResourceMemory: *resource.NewQuantity(int64(vm.Spec.MemoryMB)*1024*1024, resource.BinarySI),
+					// Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
+					// corev1.ResourceStorage: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+					// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+					corev1.ResourceHugePagesPrefix+"2Mi": *resource.NewQuantity(int64(vm.Spec.MemoryMB)*1024*1024, resource.BinarySI),
+				},
+			}
+		} else {
+			vmContainer.Resources = corev1.ResourceRequirements{
+				Limits: map[corev1.ResourceName]resource.Quantity{
+					// CPU, in cores. (500m = .5 cores)
+					corev1.ResourceCPU: *resource.NewQuantity(int64(vm.Spec.Cpus), resource.BinarySI),
+					// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+					corev1.ResourceMemory: *resource.NewQuantity(int64(vm.Spec.MemoryMB)*1024*1024, resource.BinarySI),
+					// Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
+					// corev1.ResourceStorage: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
+				},
+			}
 		}
 	}
 
@@ -124,6 +150,12 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 	for i, publicKey := range publicKeys {
 		vmContainer.Env = append(vmContainer.Env,
 			common.MakeEnvVar(fmt.Sprintf("PUBLIC_KEY_%d", i+1), publicKey.Spec.PublicKey, nil))
+	}
+
+	if vm.Spec.UseHugePages {
+		hugepagesvolume = common.MakeVolEmptyDirHugePages("hugepages")
+	} else {
+		hugepagesvolume = common.MakeVolEmptyDir("hugepages")
 	}
 
 	uniquePodName := newPodName(vm.Name)
@@ -151,11 +183,12 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 				common.MakeHostStateVol(vm.Name, "vm-image"),
 				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, vm.Name)),
 				common.MakeVolHostPath("dev-kvm", "/dev/kvm"),
+				hugepagesvolume,
 			},
 			InitContainers: []corev1.Container{
 				corev1.Container{
 					Name:            "debootstrap",
-					Image:           *common.ImageVMTools,
+                                        Image:           imagevmtools,
 					ImagePullPolicy: corev1.PullAlways,
 					VolumeMounts: []corev1.VolumeMount{
 						common.MakeVolumeMount("vm-fs", "/vm-tools", "", false),

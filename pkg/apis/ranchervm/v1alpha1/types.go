@@ -48,6 +48,10 @@ type VirtualMachineSpec struct {
 	// This is mutable at runtime and will trigger a live migration.
 	// +optional
 	NodeName string `json:"node_name"`
+        KvmArgs string `json:"kvm_extra_args"`
+        ImageVMTools string `json:"image_vmtools"`
+        UseHugePages bool `json:"use_hugepages"`
+
 }
 
 type StateType string

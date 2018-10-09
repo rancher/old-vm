@@ -50,6 +50,17 @@ func MakeVolEmptyDir(name string) corev1.Volume {
 	}
 }
 
+func MakeVolEmptyDirHugePages(name string) corev1.Volume {
+	return corev1.Volume{
+		Name: name,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+                                Medium: corev1.StorageMediumHugepages,
+                        },
+		},
+	}
+}
+
 func MakeVolHostPath(name, path string) corev1.Volume {
 	return corev1.Volume{
 		Name: name,

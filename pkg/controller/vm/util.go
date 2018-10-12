@@ -39,6 +39,8 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 	var publicKeys []*v1alpha1.Credential
         var imagevmtools string
         var hugepagesvolume corev1.Volume
+        var vmimagevolume corev1.Volume
+        var vmvolumesvolume corev1.Volume
 	for _, publicKeyName := range vm.Spec.PublicKeys {
 		publicKey, err := ctrl.credLister.Get(publicKeyName)
 		if err != nil {
@@ -94,6 +96,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			common.MakeVolumeMount("vm-image", "/image", "", false),
+			common.MakeVolumeMount("vm-volumes", "/volumes", "", false),
 			common.MakeVolumeMount("dev-kvm", "/dev/kvm", "", false),
 			common.MakeVolumeMount("hugepages", "/hugepages", "", false),
 			common.MakeVolumeMount("vm-socket", "/vm", "", false),
@@ -158,6 +161,18 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 		hugepagesvolume = common.MakeVolEmptyDir("hugepages")
 	}
 
+	if (vm.Spec.VmImagePvc == "" ) {
+		vmimagevolume = common.MakeHostStateVol(vm.Name, "vm-image")
+	} else {
+		vmimagevolume = common.MakePvcVol("vm-image", vm.Spec.VmImagePvc)
+	}
+
+	if (vm.Spec.VmVolumesPvc == "" ) {
+		vmvolumesvolume = common.MakeHostStateVol(vm.Name, "vm-volumes")
+	} else {
+		vmvolumesvolume = common.MakePvcVol("vm-volumes", vm.Spec.VmVolumesPvc)
+	}
+
 	uniquePodName := newPodName(vm.Name)
 	vmPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -180,7 +195,8 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
 				common.MakeHostStateVol(vm.Name, "vm-fs"),
-				common.MakeHostStateVol(vm.Name, "vm-image"),
+				vmimagevolume,
+				vmvolumesvolume,
 				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, vm.Name)),
 				common.MakeVolHostPath("dev-kvm", "/dev/kvm"),
 				hugepagesvolume,

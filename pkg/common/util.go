@@ -110,3 +110,14 @@ func MakeHostStateVol(vmName, volName string) corev1.Volume {
 		},
 	}
 }
+
+func MakePvcVol(name, pvcname string) corev1.Volume {
+	return corev1.Volume{
+		Name: name,
+		VolumeSource: corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: pvcname,
+			},
+		},
+	}
+}

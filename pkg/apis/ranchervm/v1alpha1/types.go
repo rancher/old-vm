@@ -51,8 +51,8 @@ type VirtualMachineSpec struct {
         KvmArgs string `json:"kvm_extra_args"`
         ImageVMTools string `json:"image_vmtools"`
         UseHugePages bool `json:"use_hugepages"`
-        VmImagePvc string `json:"image_pvc"`
-        VmVolumesPvc string `json:"volumes_pvc"`
+        VmImagePvcName string `json:"image_pvc"`
+        VmVolumesPvcName string `json:"volumes_pvc"`
 }
 
 type StateType string

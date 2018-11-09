@@ -29,11 +29,11 @@ func isValidName(names ...string) bool {
 	return valid
 }
 
-func isValidCpus(cpus int32) bool {
+func isValidCpus(cpus int) bool {
 	return cpus >= 1 && cpus <= 32
 }
 
-func isValidMemory(memory int32) bool {
+func isValidMemory(memory int) bool {
 	return memory >= 64 && memory <= 65536
 }
 

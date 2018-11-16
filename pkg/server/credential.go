@@ -15,6 +15,28 @@ import (
 	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
 )
 
+func (s *server) CredentialGet(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+	cred, err := s.credLister.Get(name)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := json.Marshal(cred)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(resp)
+}
+
 type CredentialList struct {
 	Credentials []*vmapi.Credential `json:"data"`
 }

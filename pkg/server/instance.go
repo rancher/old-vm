@@ -22,6 +22,49 @@ type InstanceList struct {
 	Instances []*vmapi.VirtualMachine `json:"data"`
 }
 
+type Instance struct {
+	Name        string   `json:"name"`
+	Cpus        int      `json:"cpus"`
+	Memory      int      `json:"memory"`
+	Image       string   `json:"image"`
+	Action      string   `json:"action"`
+	PublicKeys  []string `json:"pubkey"`
+	HostedNovnc bool     `json:"novnc"`
+	NodeName    string   `json:"node_name"`
+}
+
+func (i *Instance) IsValid() bool {
+	return isValidName(i.Name) &&
+		isValidCpus(i.Cpus) &&
+		isValidMemory(i.Memory) &&
+		isValidImage(i.Image) &&
+		isValidAction(vmapi.ActionType(i.Action)) &&
+		isValidPublicKeys(i.PublicKeys) &&
+		isValidNodeName(i.NodeName)
+}
+
+func (s *server) InstanceGet(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+	instance, err := s.vmLister.Get(name)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := json.Marshal(instance)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(resp)
+}
+
 func (l InstanceList) Len() int           { return len(l.Instances) }
 func (l InstanceList) Less(i, j int) bool { return l.Instances[i].Name < l.Instances[j].Name }
 func (l InstanceList) Swap(i, j int)      { l.Instances[i], l.Instances[j] = l.Instances[j], l.Instances[i] }
@@ -55,27 +98,6 @@ func (s *server) instanceList() (interface{}, error) {
 	sort.Sort(list)
 
 	return list, nil
-}
-
-type Instance struct {
-	Name        string   `json:"name"`
-	Cpus        int32    `json:"cpus"`
-	Memory      int32    `json:"memory"`
-	Image       string   `json:"image"`
-	Action      string   `json:"action"`
-	PublicKeys  []string `json:"pubkey"`
-	HostedNovnc bool     `json:"novnc"`
-	NodeName    string   `json:"node_name"`
-}
-
-func (i *Instance) IsValid() bool {
-	return isValidName(i.Name) &&
-		isValidCpus(i.Cpus) &&
-		isValidMemory(i.Memory) &&
-		isValidImage(i.Image) &&
-		isValidAction(vmapi.ActionType(i.Action)) &&
-		isValidPublicKeys(i.PublicKeys) &&
-		isValidNodeName(i.NodeName)
 }
 
 type InstanceCreate struct {
@@ -137,8 +159,8 @@ func (s *server) instanceCreateOne(w http.ResponseWriter, r *http.Request, ic *I
 			Name: ic.Name,
 		},
 		Spec: vmapi.VirtualMachineSpec{
-			Cpus:         ic.Cpus,
-			MemoryMB:     ic.Memory,
+			Cpus:         int32(ic.Cpus),
+			MemoryMB:     int32(ic.Memory),
 			MachineImage: vmapi.MachineImageType(ic.Image),
 			Action:       vmapi.ActionType(ic.Action),
 			PublicKeys:   ic.PublicKeys,
@@ -165,8 +187,8 @@ func (s *server) instanceCreateMany(w http.ResponseWriter, r *http.Request, ic *
 				Name: fmt.Sprintf("%s-%02d", ic.Name, i),
 			},
 			Spec: vmapi.VirtualMachineSpec{
-				Cpus:         ic.Cpus,
-				MemoryMB:     ic.Memory,
+				Cpus:         int32(ic.Cpus),
+				MemoryMB:     int32(ic.Memory),
 				MachineImage: vmapi.MachineImageType(ic.Image),
 				Action:       vmapi.ActionType(ic.Action),
 				PublicKeys:   ic.PublicKeys,
@@ -222,8 +244,8 @@ func (s *server) parseInstance(w http.ResponseWriter, r *http.Request) *Instance
 
 func (s *server) overlayVMSpec(vm *vmapi.VirtualMachine, i *Instance) *vmapi.VirtualMachine {
 	vm2 := vm.DeepCopy()
-	vm2.Spec.Cpus = i.Cpus
-	vm2.Spec.MemoryMB = i.Memory
+	vm2.Spec.Cpus = int32(i.Cpus)
+	vm2.Spec.MemoryMB = int32(i.Memory)
 	vm2.Spec.Action = vmapi.ActionType(i.Action)
 	vm2.Spec.PublicKeys = i.PublicKeys
 	vm2.Spec.HostedNovnc = i.HostedNovnc

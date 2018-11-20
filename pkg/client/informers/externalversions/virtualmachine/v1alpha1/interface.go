@@ -28,6 +28,8 @@ type Interface interface {
 	ARPTables() ARPTableInformer
 	// Credentials returns a CredentialInformer.
 	Credentials() CredentialInformer
+	// Settings returns a SettingInformer.
+	Settings() SettingInformer
 	// VirtualMachines returns a VirtualMachineInformer.
 	VirtualMachines() VirtualMachineInformer
 }
@@ -49,6 +51,11 @@ func (v *version) ARPTables() ARPTableInformer {
 // Credentials returns a CredentialInformer.
 func (v *version) Credentials() CredentialInformer {
 	return &credentialInformer{factory: v.SharedInformerFactory}
+}
+
+// Settings returns a SettingInformer.
+func (v *version) Settings() SettingInformer {
+	return &settingInformer{factory: v.SharedInformerFactory}
 }
 
 // VirtualMachines returns a VirtualMachineInformer.

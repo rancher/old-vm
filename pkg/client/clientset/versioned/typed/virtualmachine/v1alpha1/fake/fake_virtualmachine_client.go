@@ -33,6 +33,10 @@ func (c *FakeVirtualmachineV1alpha1) Credentials() v1alpha1.CredentialInterface 
 	return &FakeCredentials{c}
 }
 
+func (c *FakeVirtualmachineV1alpha1) Settings() v1alpha1.SettingInterface {
+	return &FakeSettings{c}
+}
+
 func (c *FakeVirtualmachineV1alpha1) VirtualMachines() v1alpha1.VirtualMachineInterface {
 	return &FakeVirtualMachines{c}
 }

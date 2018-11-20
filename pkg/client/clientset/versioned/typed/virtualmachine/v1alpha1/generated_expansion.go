@@ -19,4 +19,6 @@ type ARPTableExpansion interface{}
 
 type CredentialExpansion interface{}
 
+type SettingExpansion interface{}
+
 type VirtualMachineExpansion interface{}

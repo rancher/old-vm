@@ -180,3 +180,120 @@ type CredentialList struct {
 
 	Items []Credential `json:"items"`
 }
+
+// +genclient
+// +genclient:noStatus
+// +genclient:nonNamespaced
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// Setting is a generic RancherVM setting
+type Setting struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   SettingSpec   `json:"spec"`
+	Status SettingStatus `json:"status"`
+}
+
+type SettingSpec struct {
+	Value string `json:"value"`
+}
+
+type SettingStatus struct {
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+type SettingList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []Setting `json:"items"`
+}
+
+type SettingType string
+
+const (
+	SettingTypeString = SettingType("string")
+	SettingTypeInt    = SettingType("int")
+	SettingTypeBool   = SettingType("bool")
+)
+
+type SettingName string
+
+const (
+	SettingNameLonghornEndpoint           = SettingName("longhorn-endpoint")
+	SettingNameLonghornInsecureSkipVerify = SettingName("longhorn-insecure-skip-verify")
+	SettingNameLonghornAccessKey          = SettingName("longhorn-access-key")
+	SettingNameLonghornSecretKey          = SettingName("longhorn-secret-key")
+)
+
+var (
+	SettingNameList = []SettingName{
+		SettingNameLonghornEndpoint,
+		SettingNameLonghornInsecureSkipVerify,
+		SettingNameLonghornAccessKey,
+		SettingNameLonghornSecretKey,
+	}
+)
+
+type SettingCategory string
+
+const (
+	SettingCategoryStorage = SettingCategory("storage")
+)
+
+type SettingDefinition struct {
+	DisplayName string          `json:"displayName"`
+	Description string          `json:"description"`
+	Category    SettingCategory `json:"category"`
+	Type        SettingType     `json:"type"`
+	Required    bool            `json:"required"`
+	ReadOnly    bool            `json:"readOnly"`
+	Default     string          `json:"default"`
+}
+
+var (
+	SettingDefinitions = map[SettingName]SettingDefinition{
+		SettingNameLonghornEndpoint:           SettingDefinitionLonghornEndpoint,
+		SettingNameLonghornInsecureSkipVerify: SettingDefinitionLonghornInsecureSkipVerify,
+		SettingNameLonghornAccessKey:          SettingDefinitionLonghornAccessKey,
+		SettingNameLonghornSecretKey:          SettingDefinitionLonghornSecretKey,
+	}
+
+	SettingDefinitionLonghornEndpoint = SettingDefinition{
+		DisplayName: "Longhorn Endpoint",
+		Description: "The endpoint to Longhorn installation.",
+		Category:    SettingCategoryStorage,
+		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+
+	SettingDefinitionLonghornInsecureSkipVerify = SettingDefinition{
+		DisplayName: "Longhorn Insecure Skip Verify",
+		Description: "Disable certificate path validation for Longhorn endpoint.",
+		Category:    SettingCategoryStorage,
+		Type:        SettingTypeBool,
+		Required:    false,
+		ReadOnly:    false,
+	}
+
+	SettingDefinitionLonghornAccessKey = SettingDefinition{
+		DisplayName: "Longhorn Access Key",
+		Description: "The Rancher API access key for accessing Longhorn installation.",
+		Category:    SettingCategoryStorage,
+		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+
+	SettingDefinitionLonghornSecretKey = SettingDefinition{
+		DisplayName: "Longhorn Secret Key",
+		Description: "The Rancher API secret key for accessing Longhorn installation.",
+		Category:    SettingCategoryStorage,
+		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+)

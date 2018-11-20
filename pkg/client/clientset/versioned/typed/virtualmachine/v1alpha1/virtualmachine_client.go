@@ -26,6 +26,7 @@ type VirtualmachineV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ARPTablesGetter
 	CredentialsGetter
+	SettingsGetter
 	VirtualMachinesGetter
 }
 
@@ -40,6 +41,10 @@ func (c *VirtualmachineV1alpha1Client) ARPTables() ARPTableInterface {
 
 func (c *VirtualmachineV1alpha1Client) Credentials() CredentialInterface {
 	return newCredentials(c)
+}
+
+func (c *VirtualmachineV1alpha1Client) Settings() SettingInterface {
+	return newSettings(c)
 }
 
 func (c *VirtualmachineV1alpha1Client) VirtualMachines() VirtualMachineInterface {

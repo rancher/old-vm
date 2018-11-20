@@ -47,12 +47,13 @@ type VirtualMachineSpec struct {
 	// NodeName is the name of the node where the virtual machine should run.
 	// This is mutable at runtime and will trigger a live migration.
 	// +optional
-	NodeName string `json:"node_name"`
-        KvmArgs string `json:"kvm_extra_args"`
-        ImageVMTools string `json:"image_vmtools"`
-        UseHugePages bool `json:"use_hugepages"`
-        VmImagePvcName string `json:"image_pvc"`
-        VmVolumesPvcName string `json:"volumes_pvc"`
+	NodeName         string `json:"node_name"`
+	KvmArgs          string `json:"kvm_extra_args"`
+	ImageVMTools     string `json:"image_vmtools"`
+	UseHugePages     bool   `json:"use_hugepages"`
+	VmImagePvcName   string `json:"image_pvc"`
+	VmVolumesPvcName string `json:"volumes_pvc"`
+	ISCSITarget      string `json:"iscsi_target"`
 }
 
 type StateType string

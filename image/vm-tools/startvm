@@ -83,6 +83,10 @@ else
             exit 3
         fi
     fi
+
+    if [ ! -z $ISCSI_TARGET ]; then
+        KVM_BLK_OPTS="-drive file=${ISCSI_TARGET},format=raw"
+    fi
 fi
 
 VOLUMES_DIR="/volumes/"

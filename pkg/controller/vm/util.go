@@ -37,10 +37,10 @@ var privileged = true
 
 func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {
 	var publicKeys []*v1alpha1.Credential
-        var imageVmTools string
-        var hugePagesVolume corev1.Volume
-        var vmImageVolume corev1.Volume
-        var vmVolumesVolume corev1.Volume
+	var imageVmTools string
+	var hugePagesVolume corev1.Volume
+	var vmImageVolume corev1.Volume
+	var vmVolumesVolume corev1.Volume
 	for _, publicKeyName := range vm.Spec.PublicKeys {
 		publicKey, err := ctrl.credLister.Get(publicKeyName)
 		if err != nil {
@@ -52,13 +52,13 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 	cpu := strconv.Itoa(int(vm.Spec.Cpus))
 	mem := strconv.Itoa(int(vm.Spec.MemoryMB))
 	image := string(vm.Spec.MachineImage)
-        kvmextraargs := string(vm.Spec.KvmArgs)
+	kvmextraargs := string(vm.Spec.KvmArgs)
 
-        if (vm.Spec.ImageVMTools == "" ) {
-                imageVmTools = *common.ImageVMTools
-        } else {
-                imageVmTools = vm.Spec.ImageVMTools
-        }
+	if vm.Spec.ImageVMTools == "" {
+		imageVmTools = *common.ImageVMTools
+	} else {
+		imageVmTools = vm.Spec.ImageVMTools
+	}
 
 	vncProbe := &corev1.Probe{
 		Handler: corev1.Handler{
@@ -86,7 +86,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			common.MakeEnvVarFieldPath("MY_POD_NAME", "metadata.name"),
 			common.MakeEnvVarFieldPath("MY_POD_NAMESPACE", "metadata.namespace"),
 			common.MakeEnvVar("IFACE", iface, nil),
-                        common.MakeEnvVar("KVM_EXTRA_ARGS", kvmextraargs, nil),
+			common.MakeEnvVar("KVM_EXTRA_ARGS", kvmextraargs, nil),
 			common.MakeEnvVar("MEMORY_MB", mem, nil),
 			common.MakeEnvVar("CPUS", cpu, nil),
 			common.MakeEnvVar("MAC", vm.Status.MAC, nil),
@@ -130,7 +130,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 					// Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
 					// corev1.ResourceStorage: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
 					// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
-					corev1.ResourceHugePagesPrefix+"2Mi": *resource.NewQuantity(int64(vm.Spec.MemoryMB)*1024*1024, resource.BinarySI),
+					corev1.ResourceHugePagesPrefix + "2Mi": *resource.NewQuantity(int64(vm.Spec.MemoryMB)*1024*1024, resource.BinarySI),
 				},
 			}
 		} else {
@@ -161,16 +161,20 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 		hugePagesVolume = common.MakeVolEmptyDir("hugepages")
 	}
 
-	if (vm.Spec.VmImagePvcName == "" ) {
+	if vm.Spec.VmImagePvcName == "" {
 		vmImageVolume = common.MakeHostStateVol(vm.Name, "vm-image")
 	} else {
 		vmImageVolume = common.MakePvcVol("vm-image", vm.Spec.VmImagePvcName)
 	}
 
-	if (vm.Spec.VmVolumesPvcName == "" ) {
+	if vm.Spec.VmVolumesPvcName == "" {
 		vmVolumesVolume = common.MakeHostStateVol(vm.Name, "vm-volumes")
 	} else {
 		vmVolumesVolume = common.MakePvcVol("vm-volumes", vm.Spec.VmVolumesPvcName)
+	}
+
+	if vm.Spec.ISCSITarget != "" {
+		vmContainer.Env = append(vmContainer.Env, common.MakeEnvVar("ISCSI_TARGET", vm.Spec.ISCSITarget, nil))
 	}
 
 	uniquePodName := newPodName(vm.Name)
@@ -204,7 +208,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			InitContainers: []corev1.Container{
 				corev1.Container{
 					Name:            "debootstrap",
-                                        Image:           imageVmTools,
+					Image:           imageVmTools,
 					ImagePullPolicy: corev1.PullAlways,
 					VolumeMounts: []corev1.VolumeMount{
 						common.MakeVolumeMount("vm-fs", "/vm-tools", "", false),

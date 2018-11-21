@@ -70,8 +70,11 @@ func (s *server) credentialList() (interface{}, error) {
 		return nil, err
 	}
 
-	list := CredentialList{
-		Credentials: creds,
+	list := CredentialList{}
+	if len(creds) > 0 {
+		list.Credentials = creds
+	} else {
+		list.Credentials = []*vmapi.Credential{}
 	}
 	sort.Sort(list)
 

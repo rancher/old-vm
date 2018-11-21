@@ -40,8 +40,11 @@ func (s *server) nodeList() (interface{}, error) {
 		return nil, err
 	}
 
-	list := NodeList{
-		Nodes: nodes,
+	list := NodeList{}
+	if len(nodes) > 0 {
+		list.Nodes = nodes
+	} else {
+		list.Nodes = []*corev1.Node{}
 	}
 	sort.Sort(list)
 

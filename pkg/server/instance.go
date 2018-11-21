@@ -92,8 +92,11 @@ func (s *server) instanceList() (interface{}, error) {
 		return []byte{}, err
 	}
 
-	list := InstanceList{
-		Instances: vms,
+	list := InstanceList{}
+	if len(vms) > 0 {
+		list.Instances = vms
+	} else {
+		list.Instances = []*vmapi.VirtualMachine{}
 	}
 	sort.Sort(list)
 

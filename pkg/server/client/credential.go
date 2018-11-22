@@ -27,6 +27,7 @@ func (c *RancherVMClient) CredentialCreate(name, publicKey string) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("CredentialCreate failed: %v", resp.Status)
@@ -64,5 +65,7 @@ func (c *RancherVMClient) CredentialDelete(name string) error {
 	} else if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("CredentialDelete failed: %v", resp.Status)
 	}
+	defer resp.Body.Close()
+
 	return nil
 }

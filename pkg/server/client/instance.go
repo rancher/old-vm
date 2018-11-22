@@ -27,6 +27,7 @@ func (c *RancherVMClient) InstanceCreate(i server.Instance, count int32) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("InstanceCreate failed: %v", resp.Status)
@@ -86,6 +87,8 @@ func (c *RancherVMClient) InstanceStop(name string) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotModified {
 		return fmt.Errorf("InstanceStop failed: %v", resp.Status)
 	}
@@ -97,6 +100,8 @@ func (c *RancherVMClient) InstanceStart(name string) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotModified {
 		return fmt.Errorf("InstanceStart failed: %v", resp.Status)
 	}
@@ -113,6 +118,7 @@ func (c *RancherVMClient) InstanceUpdate(instance *vmapi.VirtualMachine) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotModified {
 		return fmt.Errorf("InstanceUpdate failed: %v", resp.Status)

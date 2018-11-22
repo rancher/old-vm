@@ -101,7 +101,7 @@ func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine,
 	}
 
 	// novnc pod needs to move at this point to read from unix socket on different host
-	return ctrl.deleteNovncPod(vm.Name)
+	return ctrl.deleteConsolePod(vm)
 }
 
 func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMachine) (bool, *corev1.Pod, *corev1.Pod, error) {
@@ -122,7 +122,12 @@ func (ctrl *VirtualMachineController) startMigrateTargetPod(vm *vmapi.VirtualMac
 	// If the second pod doesn't already exist, start one.
 	case 1:
 		var getErr, createErr error
-		pod := ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, true)
+		var pod *corev1.Pod
+		if vm.Spec.Volume.Longhorn != nil {
+			pod = ctrl.createLonghornMachinePod(vm, true)
+		} else {
+			pod = ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, true)
+		}
 		pod, createErr = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(pod)
 		if createErr != nil {
 			glog.V(2).Infof("Error creating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, createErr)

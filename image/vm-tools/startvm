@@ -62,6 +62,8 @@ KVM_ARGS=$@
 if [ -e /dev/vm/root ]; then
     KVM_BLK_OPTS="$KVM_RAW_BLK_OPTS"
     KVM_IMAGE=/dev/vm/root
+elif [ ! -z $ISCSI_TARGET ]; then
+    KVM_BLK_OPTS="-drive file=${ISCSI_TARGET},format=raw"
 else
     BASE_IMAGE_DIR_LIST=( `ls /base_image` )
     if [ ${#BASE_IMAGE_DIR_LIST[@]} -ne 1 ]; then
@@ -82,10 +84,6 @@ else
             echo "Failed to create qcow2 image"
             exit 3
         fi
-    fi
-
-    if [ ! -z $ISCSI_TARGET ]; then
-        KVM_BLK_OPTS="-drive file=${ISCSI_TARGET},format=raw"
     fi
 fi
 

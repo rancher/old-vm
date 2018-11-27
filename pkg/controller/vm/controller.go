@@ -414,12 +414,8 @@ func (ctrl *VirtualMachineController) process(vm *vmapi.VirtualMachine, keyObj i
 		err3 := ctrl.deleteConsoleService(vm)
 
 		if vm.Spec.Volume.Longhorn != nil {
-			vol, err := ctrl.lhClient.GetVolume(vm.Name)
-			if err != nil {
+			if err := ctrl.deleteLonghornVolume(vm); err != nil {
 				return err
-			}
-			if vol != nil {
-				return ctrl.lhClient.DeleteVolume(vm.Name)
 			}
 		}
 		// TODO delete host path (or emptyDir refactor)
@@ -457,6 +453,29 @@ func (ctrl *VirtualMachineController) createLonghornVolume(vm *vmapi.VirtualMach
 			return err
 		}
 		if err := ctrl.createPersistentVolumeClaim(vm); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ctrl *VirtualMachineController) deleteLonghornVolume(vm *vmapi.VirtualMachine) error {
+	if vol, err := ctrl.lhClient.GetVolume(vm.Name); err != nil {
+		return err
+	} else if vol != nil {
+		if err := ctrl.lhClient.DeleteVolume(vm.Name); err != nil {
+			return err
+		}
+	}
+
+	if err := ctrl.kubeClient.CoreV1().PersistentVolumes().Delete(vm.Name, &metav1.DeleteOptions{}); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+
+	if err := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(common.NamespaceVM).Delete(vm.Name, &metav1.DeleteOptions{}); err != nil {
+		if !apierrors.IsNotFound(err) {
 			return err
 		}
 	}

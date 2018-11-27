@@ -21,11 +21,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/emicklei/go-restful-swagger12"
 	"github.com/googleapis/gnostic/OpenAPIv2"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/discovery"
@@ -98,26 +96,16 @@ func (d *memCacheClient) RESTClient() restclient.Interface {
 	return d.delegate.RESTClient()
 }
 
-// TODO: Should this also be cached? The results seem more likely to be
-// inconsistent with ServerGroups and ServerResources given the requirement to
-// actively Invalidate.
 func (d *memCacheClient) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
-	return d.delegate.ServerPreferredResources()
+	return discovery.ServerPreferredResources(d)
 }
 
-// TODO: Should this also be cached? The results seem more likely to be
-// inconsistent with ServerGroups and ServerResources given the requirement to
-// actively Invalidate.
 func (d *memCacheClient) ServerPreferredNamespacedResources() ([]*metav1.APIResourceList, error) {
-	return d.delegate.ServerPreferredNamespacedResources()
+	return discovery.ServerPreferredNamespacedResources(d)
 }
 
 func (d *memCacheClient) ServerVersion() (*version.Info, error) {
 	return d.delegate.ServerVersion()
-}
-
-func (d *memCacheClient) SwaggerSchema(version schema.GroupVersion) (*swagger.ApiDeclaration, error) {
-	return d.delegate.SwaggerSchema(version)
 }
 
 func (d *memCacheClient) OpenAPISchema() (*openapi_v2.Document, error) {

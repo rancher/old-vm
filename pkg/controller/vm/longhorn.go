@@ -10,7 +10,7 @@ import (
 	"net/http"
 
 	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
-	vmlisters "github.com/rancher/vm/pkg/client/listers/virtualmachine/v1alpha1"
+	vmlisters "github.com/rancher/vm/pkg/client/listers/ranchervm/v1alpha1"
 )
 
 type LonghornClient struct {

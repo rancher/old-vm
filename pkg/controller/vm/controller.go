@@ -30,8 +30,8 @@ import (
 
 	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
 	vmclientset "github.com/rancher/vm/pkg/client/clientset/versioned"
-	vminformers "github.com/rancher/vm/pkg/client/informers/externalversions/virtualmachine/v1alpha1"
-	vmlisters "github.com/rancher/vm/pkg/client/listers/virtualmachine/v1alpha1"
+	vminformers "github.com/rancher/vm/pkg/client/informers/externalversions/ranchervm/v1alpha1"
+	vmlisters "github.com/rancher/vm/pkg/client/listers/ranchervm/v1alpha1"
 	"github.com/rancher/vm/pkg/common"
 )
 

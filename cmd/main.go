@@ -75,10 +75,12 @@ func main() {
 		go vm.NewVirtualMachineController(
 			vmClientset,
 			kubeClientset,
-			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
 			kubeInformerFactory.Core().V1().Pods(),
 			kubeInformerFactory.Batch().V1().Jobs(),
 			kubeInformerFactory.Core().V1().Services(),
+			kubeInformerFactory.Core().V1().PersistentVolumes(),
+			kubeInformerFactory.Core().V1().PersistentVolumeClaims(),
+			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Credentials(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Settings(),
 			*bridgeIface,

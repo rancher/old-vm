@@ -62,7 +62,8 @@ KVM_ARGS=$@
 if [ -e /dev/vm/root ]; then
     KVM_BLK_OPTS="$KVM_RAW_BLK_OPTS"
     KVM_IMAGE=/dev/vm/root
-elif [ ! -z $ISCSI_TARGET ]; then
+elif [ -f /longhorn/iscsi-target ]; then
+    ISCSI_TARGET=`cat /longhorn/iscsi-target`
     KVM_BLK_OPTS="-drive file=${ISCSI_TARGET},format=raw"
 else
     BASE_IMAGE_DIR_LIST=( `ls /base_image` )

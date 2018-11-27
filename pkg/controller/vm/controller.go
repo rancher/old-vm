@@ -12,6 +12,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,22 +40,27 @@ type VirtualMachineController struct {
 	vmClient   vmclientset.Interface
 	kubeClient kubernetes.Interface
 
+	podLister       corelisters.PodLister
+	podListerSynced cache.InformerSynced
+	jobLister       batchlisters.JobLister
+	jobListerSynced cache.InformerSynced
+	svcLister       corelisters.ServiceLister
+	svcListerSynced cache.InformerSynced
+	pvLister        corelisters.PersistentVolumeLister
+	pvListerSynced  cache.InformerSynced
+	pvcLister       corelisters.PersistentVolumeClaimLister
+	pvcListerSynced cache.InformerSynced
+
 	vmLister            vmlisters.VirtualMachineLister
 	vmListerSynced      cache.InformerSynced
-	podLister           corelisters.PodLister
-	podListerSynced     cache.InformerSynced
-	jobLister           batchlisters.JobLister
-	jobListerSynced     cache.InformerSynced
-	svcLister           corelisters.ServiceLister
-	svcListerSynced     cache.InformerSynced
 	credLister          vmlisters.CredentialLister
 	credListerSynced    cache.InformerSynced
 	settingLister       vmlisters.SettingLister
 	settingListerSynced cache.InformerSynced
 
-	vmQueue      workqueue.RateLimitingInterface
 	podQueue     workqueue.RateLimitingInterface
 	jobQueue     workqueue.RateLimitingInterface
+	vmQueue      workqueue.RateLimitingInterface
 	settingQueue workqueue.RateLimitingInterface
 
 	bridgeIface      string
@@ -70,10 +76,12 @@ func init() {
 func NewVirtualMachineController(
 	vmClient vmclientset.Interface,
 	kubeClient kubernetes.Interface,
-	vmInformer vminformers.VirtualMachineInformer,
 	podInformer coreinformers.PodInformer,
 	jobInformer batchinformers.JobInformer,
 	svcInformer coreinformers.ServiceInformer,
+	pvInformer coreinformers.PersistentVolumeInformer,
+	pvcInformer coreinformers.PersistentVolumeClaimInformer,
+	vmInformer vminformers.VirtualMachineInformer,
 	credInformer vminformers.CredentialInformer,
 	settingInformer vminformers.SettingInformer,
 	bridgeIface string,
@@ -90,14 +98,6 @@ func NewVirtualMachineController(
 		bridgeIface:      bridgeIface,
 		noResourceLimits: noResourceLimits,
 	}
-
-	vmInformer.Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc:    func(obj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, obj) },
-			UpdateFunc: func(oldObj, newObj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, newObj) },
-			DeleteFunc: func(obj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, obj) },
-		},
-	)
 
 	podInformer.Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -121,6 +121,14 @@ func NewVirtualMachineController(
 		},
 	)
 
+	vmInformer.Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, obj) },
+			UpdateFunc: func(oldObj, newObj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, newObj) },
+			DeleteFunc: func(obj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, obj) },
+		},
+	)
+
 	settingInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { ctrl.enqueueWork(ctrl.settingQueue, obj) },
@@ -128,9 +136,6 @@ func NewVirtualMachineController(
 			DeleteFunc: func(obj interface{}) { ctrl.enqueueWork(ctrl.settingQueue, obj) },
 		},
 	)
-
-	ctrl.vmLister = vmInformer.Lister()
-	ctrl.vmListerSynced = vmInformer.Informer().HasSynced
 
 	ctrl.podLister = podInformer.Lister()
 	ctrl.podListerSynced = podInformer.Informer().HasSynced
@@ -140,6 +145,15 @@ func NewVirtualMachineController(
 
 	ctrl.svcLister = svcInformer.Lister()
 	ctrl.svcListerSynced = svcInformer.Informer().HasSynced
+
+	ctrl.pvLister = pvInformer.Lister()
+	ctrl.pvListerSynced = pvInformer.Informer().HasSynced
+
+	ctrl.pvcLister = pvcInformer.Lister()
+	ctrl.pvcListerSynced = pvcInformer.Informer().HasSynced
+
+	ctrl.vmLister = vmInformer.Lister()
+	ctrl.vmListerSynced = vmInformer.Informer().HasSynced
 
 	ctrl.credLister = credInformer.Lister()
 	ctrl.credListerSynced = credInformer.Informer().HasSynced
@@ -207,8 +221,10 @@ func (ctrl *VirtualMachineController) run(stopCh <-chan struct{}) {
 	glog.Infof("starting vm controller")
 	defer glog.Infof("stopping vm controller")
 
-	if !cache.WaitForCacheSync(stopCh, ctrl.vmListerSynced, ctrl.podListerSynced,
-		ctrl.jobListerSynced, ctrl.svcListerSynced, ctrl.credListerSynced,
+	if !cache.WaitForCacheSync(stopCh, ctrl.podListerSynced,
+		ctrl.jobListerSynced, ctrl.svcListerSynced,
+		ctrl.pvListerSynced, ctrl.pvcListerSynced,
+		ctrl.vmListerSynced, ctrl.credListerSynced,
 		ctrl.settingListerSynced) {
 		return
 	}
@@ -373,28 +389,11 @@ func (ctrl *VirtualMachineController) process(vm *vmapi.VirtualMachine, keyObj i
 		var err error
 		switch vm.Spec.Action {
 		case vmapi.ActionStart:
-			if vm.Spec.Volume.Longhorn != nil && vm.Status.ISCSITarget == "" {
-				defer func() {
-					ctrl.vmQueue.AddRateLimited(keyObj)
-				}()
-
-				vol, err := ctrl.lhClient.GetVolume(vm.Name)
-				if err != nil {
+			// if vm.Spec.Volume.Longhorn != nil && vm.Status.ISCSITarget == "" {
+			if vm.Spec.Volume.Longhorn != nil {
+				if err := ctrl.createLonghornVolume(vm); err != nil {
 					return err
 				}
-
-				if vol == nil {
-					return ctrl.lhClient.CreateVolume(vm)
-				}
-				if vol.State == "detached" {
-					return ctrl.lhClient.AttachVolume(vm.Name, "node01")
-				}
-				if vol.State == "attached" && vol.Robustness == "healthy" && len(vol.Controllers) == 1 {
-					vm2 := vm.DeepCopy()
-					vm2.Status.ISCSITarget = vol.Controllers[0].Endpoint
-					return ctrl.updateVMStatus(vm, vm2)
-				}
-				return nil
 			}
 			err = ctrl.start(vm)
 		case vmapi.ActionStop:
@@ -433,6 +432,85 @@ func (ctrl *VirtualMachineController) process(vm *vmapi.VirtualMachine, keyObj i
 		}
 	}
 	return nil
+}
+
+func (ctrl *VirtualMachineController) createLonghornVolume(vm *vmapi.VirtualMachine) error {
+	if vol, err := ctrl.lhClient.GetVolume(vm.Name); err != nil {
+		return err
+	} else if vol == nil {
+		if err := ctrl.lhClient.CreateVolume(vm); err != nil {
+			return err
+		}
+	}
+
+	if _, err := ctrl.pvLister.Get(vm.Name); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+		if err := ctrl.createPersistentVolume(vm); err != nil {
+			return err
+		}
+	}
+
+	if _, err := ctrl.pvcLister.PersistentVolumeClaims(common.NamespaceVM).Get(vm.Name); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+		if err := ctrl.createPersistentVolumeClaim(vm); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ctrl *VirtualMachineController) createPersistentVolume(vm *vmapi.VirtualMachine) error {
+	_, err := ctrl.kubeClient.CoreV1().PersistentVolumes().Create(&corev1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: vm.Name,
+		},
+		Spec: corev1.PersistentVolumeSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Capacity: map[corev1.ResourceName]resource.Quantity{
+				corev1.ResourceStorage: resource.MustParse(vm.Spec.Volume.Longhorn.Size),
+			},
+			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
+			PersistentVolumeSource: corev1.PersistentVolumeSource{
+				CSI: &corev1.CSIPersistentVolumeSource{
+					Driver: "io.rancher.longhorn",
+					VolumeAttributes: map[string]string{
+						"frontend": "iscsi",
+					},
+					VolumeHandle: vm.Name,
+				},
+			},
+		},
+	})
+	return err
+}
+
+var noStorageClass = ""
+
+func (ctrl *VirtualMachineController) createPersistentVolumeClaim(vm *vmapi.VirtualMachine) error {
+	_, err := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(common.NamespaceVM).Create(&corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: vm.Name,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: map[corev1.ResourceName]resource.Quantity{
+					corev1.ResourceStorage: resource.MustParse(vm.Spec.Volume.Longhorn.Size),
+				},
+			},
+			StorageClassName: &noStorageClass,
+			VolumeName:       vm.Name,
+		},
+	})
+	return err
 }
 
 func (ctrl *VirtualMachineController) setTerminating(vm *vmapi.VirtualMachine) error {

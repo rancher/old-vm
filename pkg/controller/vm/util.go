@@ -89,6 +89,7 @@ func (ctrl *VirtualMachineController) createLonghornMachinePod(vm *v1alpha1.Virt
 			Volumes: []corev1.Volume{
 				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, vm.Name)),
 				common.MakeVolHostPath("dev-kvm", "/dev/kvm"),
+				common.MakePvcVol("longhorn", vm.Name),
 			},
 			Containers: []corev1.Container{
 				corev1.Container{
@@ -111,10 +112,10 @@ func (ctrl *VirtualMachineController) createLonghornMachinePod(vm *v1alpha1.Virt
 					VolumeMounts: []corev1.VolumeMount{
 						common.MakeVolumeMount("dev-kvm", "/dev/kvm", "", false),
 						common.MakeVolumeMount("vm-socket", "/vm", "", false),
+						common.MakeVolumeMount("longhorn", "/longhorn", "", false),
 					},
 					LivenessProbe:  consoleProbe,
 					ReadinessProbe: consoleProbe,
-					// ImagePullPolicy: corev1.PullPolicy{},
 					SecurityContext: &corev1.SecurityContext{
 						Privileged: &privileged,
 					},
@@ -122,11 +123,6 @@ func (ctrl *VirtualMachineController) createLonghornMachinePod(vm *v1alpha1.Virt
 			},
 			HostNetwork: true,
 		},
-	}
-
-	if vm.Status.ISCSITarget != "" {
-		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env,
-			common.MakeEnvVar("ISCSI_TARGET", vm.Status.ISCSITarget, nil))
 	}
 
 	// Disallow scheduling a migration pod on the same node

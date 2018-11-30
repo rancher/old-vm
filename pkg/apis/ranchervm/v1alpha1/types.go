@@ -52,7 +52,6 @@ type VirtualMachineSpec struct {
 	UseHugePages     bool         `json:"use_hugepages"`
 	VmImagePvcName   string       `json:"image_pvc"`
 	VmVolumesPvcName string       `json:"volumes_pvc"`
-	ISCSITarget      string       `json:"iscsi_target"`
 	Volume           VolumeSource `json:"volume"`
 }
 
@@ -112,8 +111,6 @@ type VirtualMachineStatus struct {
 	NodeName string `json:"node_name"`
 	// NodeIP is the IP address of the node where the virtual machine is running
 	NodeIP string `json:"node_ip"`
-	// ISCSITarget is the iSCSI target of the virtual machine's root volume
-	ISCSITarget string `json:"iscsi_target"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

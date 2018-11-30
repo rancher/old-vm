@@ -23,14 +23,15 @@ type InstanceList struct {
 }
 
 type Instance struct {
-	Name        string   `json:"name"`
-	Cpus        int      `json:"cpus"`
-	Memory      int      `json:"memory"`
-	Image       string   `json:"image"`
-	Action      string   `json:"action"`
-	PublicKeys  []string `json:"pubkey"`
-	HostedNovnc bool     `json:"novnc"`
-	NodeName    string   `json:"node_name"`
+	Name        string             `json:"name"`
+	Cpus        int                `json:"cpus"`
+	Memory      int                `json:"memory"`
+	Image       string             `json:"image"`
+	Action      string             `json:"action"`
+	PublicKeys  []string           `json:"pubkey"`
+	HostedNovnc bool               `json:"novnc"`
+	NodeName    string             `json:"node_name"`
+	Volume      vmapi.VolumeSource `json:"volume"`
 }
 
 func (i *Instance) IsValid() bool {
@@ -40,7 +41,8 @@ func (i *Instance) IsValid() bool {
 		isValidImage(i.Image) &&
 		isValidAction(vmapi.ActionType(i.Action)) &&
 		isValidPublicKeys(i.PublicKeys) &&
-		isValidNodeName(i.NodeName)
+		isValidNodeName(i.NodeName) &&
+		isValidVolume(i.Volume)
 }
 
 func (s *server) InstanceGet(w http.ResponseWriter, r *http.Request) {
@@ -156,20 +158,25 @@ func (s *server) InstanceCreate(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *server) createMachineSpec(ic *InstanceCreate) vmapi.VirtualMachineSpec {
+	return vmapi.VirtualMachineSpec{
+		Cpus:         int32(ic.Cpus),
+		MemoryMB:     int32(ic.Memory),
+		MachineImage: vmapi.MachineImageType(ic.Image),
+		Action:       vmapi.ActionType(ic.Action),
+		PublicKeys:   ic.PublicKeys,
+		HostedNovnc:  ic.HostedNovnc,
+		NodeName:     ic.NodeName,
+		Volume:       ic.Instance.Volume,
+	}
+}
+
 func (s *server) instanceCreateOne(w http.ResponseWriter, r *http.Request, ic *InstanceCreate) {
 	vm := &vmapi.VirtualMachine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ic.Name,
 		},
-		Spec: vmapi.VirtualMachineSpec{
-			Cpus:         int32(ic.Cpus),
-			MemoryMB:     int32(ic.Memory),
-			MachineImage: vmapi.MachineImageType(ic.Image),
-			Action:       vmapi.ActionType(ic.Action),
-			PublicKeys:   ic.PublicKeys,
-			HostedNovnc:  ic.HostedNovnc,
-			NodeName:     ic.NodeName,
-		},
+		Spec: s.createMachineSpec(ic),
 	}
 
 	vm, err := s.vmClient.VirtualmachineV1alpha1().VirtualMachines().Create(vm)
@@ -189,15 +196,7 @@ func (s *server) instanceCreateMany(w http.ResponseWriter, r *http.Request, ic *
 			ObjectMeta: metav1.ObjectMeta{
 				Name: fmt.Sprintf("%s-%02d", ic.Name, i),
 			},
-			Spec: vmapi.VirtualMachineSpec{
-				Cpus:         int32(ic.Cpus),
-				MemoryMB:     int32(ic.Memory),
-				MachineImage: vmapi.MachineImageType(ic.Image),
-				Action:       vmapi.ActionType(ic.Action),
-				PublicKeys:   ic.PublicKeys,
-				HostedNovnc:  ic.HostedNovnc,
-				NodeName:     ic.NodeName,
-			},
+			Spec: s.createMachineSpec(ic),
 		}
 
 		vm, err := s.vmClient.VirtualmachineV1alpha1().VirtualMachines().Create(vm)

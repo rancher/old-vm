@@ -60,7 +60,8 @@ func (c *RancherVMClient) CredentialGet(name string) (*vmapi.Credential, error) 
 }
 
 func (c *RancherVMClient) CredentialDelete(name string) error {
-	if resp, err := c.delete("/v1/credential/" + name); err != nil {
+	resp, err := c.delete("/v1/credential/" + name)
+	if err != nil {
 		return err
 	} else if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("CredentialDelete failed: %v", resp.Status)

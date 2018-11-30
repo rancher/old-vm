@@ -1,8 +1,6 @@
 package v1alpha1
 
-import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // +genclient
 // +genclient:noStatus
@@ -38,8 +36,9 @@ const (
 
 // VirtualMachineSpec is the spec for a VirtualMachine resource
 type VirtualMachineSpec struct {
-	Cpus         int32            `json:"cpus"`
-	MemoryMB     int32            `json:"memory_mb"`
+	Cpus     int32 `json:"cpus"`
+	MemoryMB int32 `json:"memory_mb"`
+	// +optional
 	MachineImage MachineImageType `json:"image"`
 	Action       ActionType       `json:"action"`
 	PublicKeys   []string         `json:"public_keys"`
@@ -47,12 +46,28 @@ type VirtualMachineSpec struct {
 	// NodeName is the name of the node where the virtual machine should run.
 	// This is mutable at runtime and will trigger a live migration.
 	// +optional
-	NodeName string `json:"node_name"`
-        KvmArgs string `json:"kvm_extra_args"`
-        ImageVMTools string `json:"image_vmtools"`
-        UseHugePages bool `json:"use_hugepages"`
-        VmImagePvcName string `json:"image_pvc"`
-        VmVolumesPvcName string `json:"volumes_pvc"`
+	NodeName         string       `json:"node_name"`
+	KvmArgs          string       `json:"kvm_extra_args"`
+	ImageVMTools     string       `json:"image_vmtools"`
+	UseHugePages     bool         `json:"use_hugepages"`
+	VmImagePvcName   string       `json:"image_pvc"`
+	VmVolumesPvcName string       `json:"volumes_pvc"`
+	ISCSITarget      string       `json:"iscsi_target"`
+	Volume           VolumeSource `json:"volume"`
+}
+
+type VolumeSource struct {
+	EmptyDir *EmptyDirVolumeSource `json:"emptyDir,omitempty"`
+	Longhorn *LonghornVolumeSource `json:"longhorn,omitempty"`
+}
+
+type EmptyDirVolumeSource struct{}
+
+type LonghornVolumeSource struct {
+	Size                string `json:"size"`
+	BaseImage           string `json:"base_image"`
+	NumberOfReplicas    int    `json:"number_of_replicas"`
+	StaleReplicaTimeout int    `json:"stale_replica_timeout"`
 }
 
 type StateType string
@@ -97,6 +112,8 @@ type VirtualMachineStatus struct {
 	NodeName string `json:"node_name"`
 	// NodeIP is the IP address of the node where the virtual machine is running
 	NodeIP string `json:"node_ip"`
+	// ISCSITarget is the iSCSI target of the virtual machine's root volume
+	ISCSITarget string `json:"iscsi_target"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -138,8 +155,7 @@ type ARPTableSpec struct {
 	Table map[string]ARPEntry `json:"table"`
 }
 
-type ARPTableStatus struct {
-}
+type ARPTableStatus struct{}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -168,8 +184,7 @@ type CredentialSpec struct {
 	PublicKey string `json:"public_key"`
 }
 
-type CredentialStatus struct {
-}
+type CredentialStatus struct{}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -179,3 +194,121 @@ type CredentialList struct {
 
 	Items []Credential `json:"items"`
 }
+
+// +genclient
+// +genclient:noStatus
+// +genclient:nonNamespaced
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// Setting is a generic RancherVM setting
+type Setting struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   SettingSpec   `json:"spec"`
+	Status SettingStatus `json:"status"`
+}
+
+type SettingSpec struct {
+	Value string `json:"value"`
+}
+
+type SettingStatus struct {
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+type SettingList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []Setting `json:"items"`
+}
+
+type SettingType string
+
+const (
+	SettingTypeString = SettingType("string")
+	SettingTypeInt    = SettingType("int")
+	SettingTypeBool   = SettingType("bool")
+)
+
+type SettingName string
+
+const (
+	SettingNameLonghornEndpoint           = SettingName("longhorn-endpoint")
+	SettingNameLonghornInsecureSkipVerify = SettingName("longhorn-insecure-skip-verify")
+	SettingNameLonghornAccessKey          = SettingName("longhorn-access-key")
+	SettingNameLonghornSecretKey          = SettingName("longhorn-secret-key")
+)
+
+var (
+	SettingNameList = []SettingName{
+		SettingNameLonghornEndpoint,
+		SettingNameLonghornInsecureSkipVerify,
+		SettingNameLonghornAccessKey,
+		SettingNameLonghornSecretKey,
+	}
+)
+
+type SettingCategory string
+
+const (
+	SettingCategoryStorage = SettingCategory("storage")
+)
+
+type SettingDefinition struct {
+	DisplayName string          `json:"displayName"`
+	Description string          `json:"description"`
+	Category    SettingCategory `json:"category"`
+	Type        SettingType     `json:"type"`
+	Required    bool            `json:"required"`
+	ReadOnly    bool            `json:"readOnly"`
+	Default     string          `json:"default"`
+}
+
+var (
+	SettingDefinitions = map[SettingName]SettingDefinition{
+		SettingNameLonghornEndpoint:           SettingDefinitionLonghornEndpoint,
+		SettingNameLonghornInsecureSkipVerify: SettingDefinitionLonghornInsecureSkipVerify,
+		SettingNameLonghornAccessKey:          SettingDefinitionLonghornAccessKey,
+		SettingNameLonghornSecretKey:          SettingDefinitionLonghornSecretKey,
+	}
+
+	SettingDefinitionLonghornEndpoint = SettingDefinition{
+		DisplayName: "Longhorn Endpoint",
+		Description: "The endpoint to Longhorn installation.",
+		Category:    SettingCategoryStorage,
+		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+
+	SettingDefinitionLonghornInsecureSkipVerify = SettingDefinition{
+		DisplayName: "Longhorn Insecure Skip Verify",
+		Description: "Disable certificate path validation for Longhorn endpoint.",
+		Category:    SettingCategoryStorage,
+		Type:        SettingTypeBool,
+		Required:    false,
+		ReadOnly:    false,
+		Default:     "false",
+	}
+
+	SettingDefinitionLonghornAccessKey = SettingDefinition{
+		DisplayName: "Longhorn Access Key",
+		Description: "The Rancher API access key for accessing Longhorn installation.",
+		Category:    SettingCategoryStorage,
+		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+
+	SettingDefinitionLonghornSecretKey = SettingDefinition{
+		DisplayName: "Longhorn Secret Key",
+		Description: "The Rancher API secret key for accessing Longhorn installation.",
+		Category:    SettingCategoryStorage,
+		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+)

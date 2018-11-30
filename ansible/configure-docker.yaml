@@ -14,8 +14,14 @@
   changed_when: docker_service.status.SubState != "running"
   when: docker_service.status is defined
 
-- name: Adding user vagrant to group docker
-  user: 
+#- name: Adding user ubuntu to group docker
+#  user: 
+#    append: yes
+#    group: docker
+#    name: ubuntu
+
+- name: Adding user rancher to group docker
+  user:
     append: yes
     group: docker
-    name: vagrant
+    name: rancher

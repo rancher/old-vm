@@ -1,0 +1,37 @@
+apiVersion: vm.rancher.io/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: example-iscsi-01
+spec:
+  action: start
+  cpus: 1
+  hosted_novnc: true
+  memory_mb: 4096
+  public_keys:
+  - james
+  node_name: node01
+  volume:
+    longhorn:
+      size: 50Gi
+      number_of_replicas: 2
+      base_image: llparse/vm-ubuntu:rancher-2.1.1
+      stale_replica_timeout: 30
+---
+apiVersion: vm.rancher.io/v1alpha1
+kind: VirtualMachine
+metadata:
+  name: example-iscsi-02
+spec:
+  action: start
+  cpus: 1
+  hosted_novnc: true
+  memory_mb: 4096
+  public_keys:
+  - james
+  node_name: node02
+  volume:
+    longhorn:
+      size: 50Gi
+      number_of_replicas: 3
+      base_image: llparse/vm-ubuntu:rancher-2.0.8
+      stale_replica_timeout: 20

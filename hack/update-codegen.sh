@@ -3,7 +3,7 @@
 # Update this to ensure the generated client code reflects the correct repo path
 REPO=${REPO:-"github.com/rancher/vm"}
 
-CODEGEN_IMAGE=${CODEGEN_IMAGE:-rancher/k8s-codegen:1.8}
+CODEGEN_IMAGE=${CODEGEN_IMAGE:-rancher/k8s-codegen:1.11}
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 

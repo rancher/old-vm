@@ -12,8 +12,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	vmclientset "github.com/rancher/vm/pkg/client/clientset/versioned"
-	vminformers "github.com/rancher/vm/pkg/client/informers/externalversions/virtualmachine/v1alpha1"
-	vmlisters "github.com/rancher/vm/pkg/client/listers/virtualmachine/v1alpha1"
+	vminformers "github.com/rancher/vm/pkg/client/informers/externalversions/ranchervm/v1alpha1"
+	vmlisters "github.com/rancher/vm/pkg/client/listers/ranchervm/v1alpha1"
 )
 
 type SimpleResourceEventHandler struct{ ChangeFunc func() }

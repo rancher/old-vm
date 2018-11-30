@@ -64,10 +64,10 @@ func main() {
 	config.Burst = 100
 
 	vmClientset := versioned.NewForConfigOrDie(config)
-	vmInformerFactory := externalversions.NewSharedInformerFactory(vmClientset, 0*time.Second)
+	vmInformerFactory := externalversions.NewSharedInformerFactory(vmClientset, 30*time.Second)
 
 	kubeClientset := kubernetes.NewForConfigOrDie(config)
-	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClientset, 0*time.Second)
+	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClientset, 30*time.Second)
 
 	stopCh := makeStopChan()
 
@@ -75,11 +75,14 @@ func main() {
 		go vm.NewVirtualMachineController(
 			vmClientset,
 			kubeClientset,
-			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
 			kubeInformerFactory.Core().V1().Pods(),
 			kubeInformerFactory.Batch().V1().Jobs(),
 			kubeInformerFactory.Core().V1().Services(),
+			kubeInformerFactory.Core().V1().PersistentVolumes(),
+			kubeInformerFactory.Core().V1().PersistentVolumeClaims(),
+			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Credentials(),
+			vmInformerFactory.Virtualmachine().V1alpha1().Settings(),
 			*bridgeIface,
 			*noResourceLimits,
 		).Run()

@@ -24,7 +24,7 @@ RUN \
   apt-get clean
 
 ENV GO_VERSION 1.8.3
-ENV K8S_VERSION release-1.8
+ENV K8S_VERSION release-1.11
 
 RUN \
   mkdir -p ${GOPATH}/bin ${GOPATH}/src ${GOPATH}/pkg && \

@@ -55,8 +55,8 @@ func MakeVolEmptyDirHugePages(name string) corev1.Volume {
 		Name: name,
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{
-                                Medium: corev1.StorageMediumHugepages,
-                        },
+				Medium: corev1.StorageMediumHugePages,
+			},
 		},
 	}
 }

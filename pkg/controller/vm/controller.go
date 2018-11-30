@@ -12,6 +12,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,8 +31,8 @@ import (
 
 	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
 	vmclientset "github.com/rancher/vm/pkg/client/clientset/versioned"
-	vminformers "github.com/rancher/vm/pkg/client/informers/externalversions/virtualmachine/v1alpha1"
-	vmlisters "github.com/rancher/vm/pkg/client/listers/virtualmachine/v1alpha1"
+	vminformers "github.com/rancher/vm/pkg/client/informers/externalversions/ranchervm/v1alpha1"
+	vmlisters "github.com/rancher/vm/pkg/client/listers/ranchervm/v1alpha1"
 	"github.com/rancher/vm/pkg/common"
 )
 
@@ -39,23 +40,33 @@ type VirtualMachineController struct {
 	vmClient   vmclientset.Interface
 	kubeClient kubernetes.Interface
 
-	vmLister         vmlisters.VirtualMachineLister
-	vmListerSynced   cache.InformerSynced
-	podLister        corelisters.PodLister
-	podListerSynced  cache.InformerSynced
-	jobLister        batchlisters.JobLister
-	jobListerSynced  cache.InformerSynced
-	svcLister        corelisters.ServiceLister
-	svcListerSynced  cache.InformerSynced
-	credLister       vmlisters.CredentialLister
-	credListerSynced cache.InformerSynced
+	podLister       corelisters.PodLister
+	podListerSynced cache.InformerSynced
+	jobLister       batchlisters.JobLister
+	jobListerSynced cache.InformerSynced
+	svcLister       corelisters.ServiceLister
+	svcListerSynced cache.InformerSynced
+	pvLister        corelisters.PersistentVolumeLister
+	pvListerSynced  cache.InformerSynced
+	pvcLister       corelisters.PersistentVolumeClaimLister
+	pvcListerSynced cache.InformerSynced
 
-	vmQueue  workqueue.RateLimitingInterface
-	podQueue workqueue.RateLimitingInterface
-	jobQueue workqueue.RateLimitingInterface
+	vmLister            vmlisters.VirtualMachineLister
+	vmListerSynced      cache.InformerSynced
+	credLister          vmlisters.CredentialLister
+	credListerSynced    cache.InformerSynced
+	settingLister       vmlisters.SettingLister
+	settingListerSynced cache.InformerSynced
+
+	podQueue     workqueue.RateLimitingInterface
+	jobQueue     workqueue.RateLimitingInterface
+	vmQueue      workqueue.RateLimitingInterface
+	settingQueue workqueue.RateLimitingInterface
 
 	bridgeIface      string
 	noResourceLimits bool
+
+	lhClient *LonghornClient
 }
 
 func init() {
@@ -65,11 +76,14 @@ func init() {
 func NewVirtualMachineController(
 	vmClient vmclientset.Interface,
 	kubeClient kubernetes.Interface,
-	vmInformer vminformers.VirtualMachineInformer,
 	podInformer coreinformers.PodInformer,
 	jobInformer batchinformers.JobInformer,
 	svcInformer coreinformers.ServiceInformer,
+	pvInformer coreinformers.PersistentVolumeInformer,
+	pvcInformer coreinformers.PersistentVolumeClaimInformer,
+	vmInformer vminformers.VirtualMachineInformer,
 	credInformer vminformers.CredentialInformer,
+	settingInformer vminformers.SettingInformer,
 	bridgeIface string,
 	noResourceLimits bool,
 ) *VirtualMachineController {
@@ -80,17 +94,10 @@ func NewVirtualMachineController(
 		vmQueue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtualmachine"),
 		podQueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "pod"),
 		jobQueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "job"),
+		settingQueue:     workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "setting"),
 		bridgeIface:      bridgeIface,
 		noResourceLimits: noResourceLimits,
 	}
-
-	vmInformer.Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc:    func(obj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, obj) },
-			UpdateFunc: func(oldObj, newObj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, newObj) },
-			DeleteFunc: func(obj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, obj) },
-		},
-	)
 
 	podInformer.Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -114,8 +121,21 @@ func NewVirtualMachineController(
 		},
 	)
 
-	ctrl.vmLister = vmInformer.Lister()
-	ctrl.vmListerSynced = vmInformer.Informer().HasSynced
+	vmInformer.Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, obj) },
+			UpdateFunc: func(oldObj, newObj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, newObj) },
+			DeleteFunc: func(obj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, obj) },
+		},
+	)
+
+	settingInformer.Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { ctrl.enqueueWork(ctrl.settingQueue, obj) },
+			UpdateFunc: func(oldObj, newObj interface{}) { ctrl.enqueueWork(ctrl.settingQueue, newObj) },
+			DeleteFunc: func(obj interface{}) { ctrl.enqueueWork(ctrl.settingQueue, obj) },
+		},
+	)
 
 	ctrl.podLister = podInformer.Lister()
 	ctrl.podListerSynced = podInformer.Informer().HasSynced
@@ -126,8 +146,20 @@ func NewVirtualMachineController(
 	ctrl.svcLister = svcInformer.Lister()
 	ctrl.svcListerSynced = svcInformer.Informer().HasSynced
 
+	ctrl.pvLister = pvInformer.Lister()
+	ctrl.pvListerSynced = pvInformer.Informer().HasSynced
+
+	ctrl.pvcLister = pvcInformer.Lister()
+	ctrl.pvcListerSynced = pvcInformer.Informer().HasSynced
+
+	ctrl.vmLister = vmInformer.Lister()
+	ctrl.vmListerSynced = vmInformer.Informer().HasSynced
+
 	ctrl.credLister = credInformer.Lister()
 	ctrl.credListerSynced = credInformer.Informer().HasSynced
+
+	ctrl.settingLister = settingInformer.Lister()
+	ctrl.settingListerSynced = settingInformer.Informer().HasSynced
 
 	return ctrl
 }
@@ -184,256 +216,32 @@ func (ctrl *VirtualMachineController) run(stopCh <-chan struct{}) {
 	defer ctrl.vmQueue.ShutDown()
 	defer ctrl.podQueue.ShutDown()
 	defer ctrl.jobQueue.ShutDown()
+	defer ctrl.settingQueue.ShutDown()
 
 	glog.Infof("starting vm controller")
 	defer glog.Infof("stopping vm controller")
 
-	if !cache.WaitForCacheSync(stopCh, ctrl.vmListerSynced, ctrl.podListerSynced,
-		ctrl.jobListerSynced, ctrl.svcListerSynced, ctrl.credListerSynced) {
+	if !cache.WaitForCacheSync(stopCh, ctrl.podListerSynced,
+		ctrl.jobListerSynced, ctrl.svcListerSynced,
+		ctrl.pvListerSynced, ctrl.pvcListerSynced,
+		ctrl.vmListerSynced, ctrl.credListerSynced,
+		ctrl.settingListerSynced) {
 		return
+	}
+
+	if err := ctrl.initSettings(); err != nil {
+		glog.Warningf(err.Error())
+	}
+	if err := ctrl.updateLonghornClient(); err != nil {
+		glog.Warningf(err.Error())
 	}
 
 	go wait.Until(ctrl.vmWorker, time.Second, stopCh)
 	go wait.Until(ctrl.podWorker, time.Second, stopCh)
 	go wait.Until(ctrl.jobWorker, time.Second, stopCh)
+	go wait.Until(ctrl.settingWorker, time.Second, stopCh)
 
 	<-stopCh
-}
-
-func (ctrl *VirtualMachineController) enqueueWork(queue workqueue.Interface, obj interface{}) {
-	// Beware of "xxx deleted" events
-	if unknown, ok := obj.(cache.DeletedFinalStateUnknown); ok && unknown.Obj != nil {
-		obj = unknown.Obj
-	}
-	objName, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
-	if err != nil {
-		glog.Errorf("failed to get key from object: %v", err)
-		return
-	}
-	queue.Add(objName)
-}
-
-func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (vm2 *vmapi.VirtualMachine, pod *corev1.Pod, err error) {
-	vm2 = vm
-	pods, err := ctrl.podLister.Pods(common.NamespaceVM).List(labels.Set{
-		"app":  common.LabelApp,
-		"name": vm.Name,
-		"role": common.LabelRoleVM,
-	}.AsSelector())
-
-	if err != nil && !apierrors.IsNotFound(err) {
-		glog.V(2).Infof("Error getting vm pod(s) %s/%s: %v", common.NamespaceVM, vm.Name, err)
-		return
-	}
-
-	alivePods := GetAlivePods(pods)
-	switch len(alivePods) {
-	case 0:
-		pod = ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, false)
-		pod, err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(pod)
-		if err != nil {
-			glog.V(2).Infof("Error creating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, err)
-			return
-		}
-	case 1:
-		pod = alivePods[0]
-	default:
-		return
-	}
-
-	vm2 = vm.DeepCopy()
-	err = ctrl.updateVMStatusWithPod(vm, vm2, pod)
-	return
-}
-
-func (ctrl *VirtualMachineController) updateVMStatusWithPod(vm *vmapi.VirtualMachine, vm2 *vmapi.VirtualMachine, pod *corev1.Pod) error {
-	if pod.Spec.NodeName != "" {
-		vm2.Status.NodeName = pod.Spec.NodeName
-	}
-	if pod.Status.HostIP != "" {
-		vm2.Status.NodeIP = pod.Status.HostIP
-	}
-	switch {
-	case pod.DeletionTimestamp != nil:
-		vm2.Status.State = vmapi.StateStopping
-	case common.IsPodReady(pod):
-		vm2.Status.State = vmapi.StateRunning
-	default:
-		vm2.Status.State = vmapi.StatePending
-	}
-	return ctrl.updateVMStatus(vm, vm2)
-}
-
-func (ctrl *VirtualMachineController) updateVMStatus(current *vmapi.VirtualMachine, updated *vmapi.VirtualMachine) (err error) {
-	if !reflect.DeepEqual(current.Status, updated.Status) ||
-		!reflect.DeepEqual(current.Finalizers, updated.Finalizers) ||
-		!reflect.DeepEqual(current.Spec, updated.Spec) {
-		updated, err = ctrl.vmClient.VirtualmachineV1alpha1().VirtualMachines().Update(updated)
-	}
-	return
-}
-
-func (ctrl *VirtualMachineController) startVM(vm *vmapi.VirtualMachine) error {
-	vm, pod, err := ctrl.updateVMPod(vm)
-	if err != nil {
-		glog.Warningf("error updating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, err)
-		return err
-	}
-
-	if pod != nil && pod.Name != "" {
-		if err = ctrl.updateNovnc(vm, pod.Name); err != nil {
-			glog.Warningf("error updating novnc %s/%s: %v", common.NamespaceVM, vm.Name, err)
-		}
-	}
-
-	// If vm is in pending state and pod is unschedulable, check to see if the
-	// requested node name matches the pod node affinity. If they are mismatched,
-	// delete the pod and allow the process to start over.
-	if vm.Status.State == vmapi.StatePending && pod != nil && IsPodUnschedulable(pod) {
-		if pod.Spec.Affinity != nil &&
-			pod.Spec.Affinity.NodeAffinity != nil &&
-			pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil &&
-			len(pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms) == 1 {
-
-			nodeSelector := pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
-			if len(nodeSelector.NodeSelectorTerms) == 1 &&
-				len(nodeSelector.NodeSelectorTerms[0].MatchExpressions) == 1 {
-
-				requirement := nodeSelector.NodeSelectorTerms[0].MatchExpressions[0]
-				if requirement.Key == common.LabelNodeHostname &&
-					requirement.Operator == corev1.NodeSelectorOpIn &&
-					len(requirement.Values) == 1 &&
-					vm.Spec.NodeName != requirement.Values[0] {
-
-					glog.V(2).Infof("User modified selector for unschedulable vm %s", vm.Name)
-					return ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Delete(pod.Name, &metav1.DeleteOptions{})
-				}
-			}
-		}
-	}
-
-	if pod != nil && vm.Spec.NodeName != "" &&
-		vm.Spec.NodeName != pod.Spec.NodeName &&
-		vm.Status.State == vmapi.StateRunning ||
-		vm.Status.State == vmapi.StateMigrating {
-		return ctrl.migrateVM(vm)
-	}
-
-	return err
-}
-
-func (ctrl *VirtualMachineController) stopVM(vm *vmapi.VirtualMachine) (err error) {
-	vm2 := vm.DeepCopy()
-	err = ctrl.deleteVmPod(vm.Name)
-	switch {
-	case err == nil:
-		vm2.Status.State = vmapi.StateStopping
-	case apierrors.IsNotFound(err):
-		vm2.Status.State = vmapi.StateStopped
-		vm2.Status.NodeName = ""
-	default:
-		vm2.Status.State = vmapi.StateError
-	}
-
-	err = ctrl.deleteMigrationJob(vm)
-	switch {
-	case err == nil:
-		vm2.Status.State = vmapi.StateStopping
-	case apierrors.IsNotFound(err):
-	default:
-		vm2.Status.State = vmapi.StateError
-	}
-
-	err = ctrl.deleteNovncPod(vm.Name)
-	switch {
-	case err == nil:
-		// if either the vm or novnc pod had to be deleted, we are stopping
-		vm2.Status.State = vmapi.StateStopping
-	case apierrors.IsNotFound(err):
-		// if the novnc was already deleted, our state is dictated by the vm pod delete
-	default:
-		vm2.Status.State = vmapi.StateError
-	}
-	err = ctrl.updateVMStatus(vm, vm2)
-	return
-}
-
-func (ctrl *VirtualMachineController) updateVM(vm *vmapi.VirtualMachine) error {
-	// set the instance id, mac address, finalizer if not present
-	if vm.Status.ID == "" || vm.Status.MAC == "" || len(vm.Finalizers) == 0 {
-		vm2 := vm.DeepCopy()
-		uid := string(vm.UID)
-		vm2.Finalizers = append(vm2.Finalizers, common.FinalizerDeletion)
-		vm2.Status.ID = fmt.Sprintf("i-%s", uid[:8])
-		vm2.Status.MAC = fmt.Sprintf("%s:%s:%s:%s:%s", common.RancherOUI, uid[:2], uid[2:4], uid[4:6], uid[6:8])
-		if err := ctrl.updateVMStatus(vm, vm2); err != nil {
-			return err
-		}
-		vm = vm2
-	}
-
-	var err error
-	switch vm.Spec.Action {
-	case vmapi.ActionStart:
-		err = ctrl.startVM(vm)
-	case vmapi.ActionStop:
-		err = ctrl.stopVM(vm)
-	default:
-		glog.Warningf("detected vm %s/%s with invalid action \"%s\"", common.NamespaceVM, vm.Name, vm.Spec.Action)
-		// TODO change VM state to ERROR, return no error (don't requeue)
-		return nil
-	}
-	return err
-}
-
-func (ctrl *VirtualMachineController) deleteVmPod(name string) error {
-	glog.V(2).Infof("trying to delete pods associated with vm %s", name)
-
-	vmPodSelector := labels.Set{
-		"name": name,
-	}.AsSelector()
-
-	pods, _ := ctrl.podLister.Pods(common.NamespaceVM).List(vmPodSelector)
-	if len(pods) == 0 {
-		return apierrors.NewNotFound(corev1.Resource("pod"), name)
-	}
-
-	return ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).DeleteCollection(&metav1.DeleteOptions{}, metav1.ListOptions{
-		LabelSelector: vmPodSelector.String(),
-	})
-}
-
-func (ctrl *VirtualMachineController) deleteVM(vm *vmapi.VirtualMachine) error {
-
-	// update status to terminating, if necessary
-	if vm.Status.State != vmapi.StateTerminating {
-		vm2 := vm.DeepCopy()
-		vm2.Status.State = vmapi.StateTerminating
-		if err := ctrl.updateVMStatus(vm, vm2); err != nil {
-			return err
-		}
-		vm = vm2
-	}
-
-	err1 := ctrl.deleteVmPod(vm.Name)
-	err2 := ctrl.deleteNovncPod(vm.Name)
-	err3 := ctrl.deleteNovncService(vm.Name)
-
-	// TODO delete host path
-
-	// Once dependent resources are all gone, remove finalizer and delete VM
-	if apierrors.IsNotFound(err1) &&
-		apierrors.IsNotFound(err2) &&
-		apierrors.IsNotFound(err3) {
-
-		vm2 := vm.DeepCopy()
-		vm2.Finalizers = []string{}
-		if err := ctrl.updateVMStatus(vm, vm2); err == nil {
-			return ctrl.vmClient.VirtualmachineV1alpha1().VirtualMachines().Delete(vm2.Name, &metav1.DeleteOptions{})
-		}
-	}
-
-	return nil
 }
 
 func (ctrl *VirtualMachineController) vmWorker() {
@@ -451,29 +259,21 @@ func (ctrl *VirtualMachineController) vmWorker() {
 			glog.V(4).Infof("error getting name of vm %q to get vm from informer: %v", key, err)
 			return false
 		}
+
 		vm, err := ctrl.vmLister.Get(name)
-		switch {
-		case err == nil:
-			switch vm.DeletionTimestamp {
-			case nil:
-				err = ctrl.updateVM(vm)
-			default:
-				err = ctrl.deleteVM(vm)
-			}
-			if err != nil {
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				glog.V(2).Infof("error getting vm %q from informer: %v", key, err)
 				ctrl.vmQueue.AddRateLimited(keyObj)
-				glog.V(5).Infof("error %v, re-enqueued %q for sync", err, keyObj)
+				glog.V(5).Infof("re-enqueued %q for sync", keyObj)
 			}
-
-		case apierrors.IsNotFound(err):
-			break
-
-		default:
-			glog.V(2).Infof("error getting vm %q from informer: %v", key, err)
-			ctrl.vmQueue.AddRateLimited(keyObj)
-			glog.V(5).Infof("re-enqueued %q for sync", keyObj)
+			return false
 		}
 
+		if err := ctrl.process(vm, keyObj); err != nil {
+			ctrl.vmQueue.AddRateLimited(keyObj)
+			glog.V(5).Infof("error %v, re-enqueued %q for sync", err, keyObj)
+		}
 		return false
 	}
 	for {
@@ -572,4 +372,370 @@ func (ctrl *VirtualMachineController) jobFilterFunc(obj interface{}) bool {
 		}
 	}
 	return false
+}
+
+func (ctrl *VirtualMachineController) process(vm *vmapi.VirtualMachine, keyObj interface{}) error {
+	if vm.DeletionTimestamp == nil {
+		// set the instance id, mac address, finalizer if not present
+		if vm.Status.ID == "" || vm.Status.MAC == "" || len(vm.Finalizers) == 0 {
+			vm2 := vm.DeepCopy()
+			uid := string(vm.UID)
+			vm2.Finalizers = append(vm2.Finalizers, common.FinalizerDeletion)
+			vm2.Status.ID = fmt.Sprintf("i-%s", uid[:8])
+			vm2.Status.MAC = fmt.Sprintf("%s:%s:%s:%s:%s", common.RancherOUI, uid[:2], uid[2:4], uid[4:6], uid[6:8])
+			return ctrl.updateVMStatus(vm, vm2)
+		}
+
+		var err error
+		switch vm.Spec.Action {
+		case vmapi.ActionStart:
+			// if vm.Spec.Volume.Longhorn != nil && vm.Status.ISCSITarget == "" {
+			if vm.Spec.Volume.Longhorn != nil {
+				if err := ctrl.createLonghornVolume(vm); err != nil {
+					return err
+				}
+			}
+			err = ctrl.start(vm)
+		case vmapi.ActionStop:
+			err = ctrl.stop(vm)
+		default:
+			glog.Warningf("detected vm %s/%s with invalid action \"%s\"", common.NamespaceVM, vm.Name, vm.Spec.Action)
+			// TODO change VM state to ERROR, return no error (don't requeue)
+			return nil
+		}
+		return err
+	} else {
+		if vm.Status.State != vmapi.StateTerminating {
+			return ctrl.setTerminating(vm)
+		}
+
+		err1 := ctrl.deleteMachinePods(vm)
+		err2 := ctrl.deleteConsolePod(vm)
+		err3 := ctrl.deleteConsoleService(vm)
+
+		if vm.Spec.Volume.Longhorn != nil {
+			if err := ctrl.deleteLonghornVolume(vm); err != nil {
+				return err
+			}
+		}
+		// TODO delete host path (or emptyDir refactor)
+
+		if apierrors.IsNotFound(err1) &&
+			apierrors.IsNotFound(err2) &&
+			apierrors.IsNotFound(err3) {
+
+			return ctrl.removeFinalizer(vm)
+		}
+	}
+	return nil
+}
+
+func (ctrl *VirtualMachineController) createLonghornVolume(vm *vmapi.VirtualMachine) error {
+	if vol, err := ctrl.lhClient.GetVolume(vm.Name); err != nil {
+		return err
+	} else if vol == nil {
+		if err := ctrl.lhClient.CreateVolume(vm); err != nil {
+			return err
+		}
+	}
+
+	if _, err := ctrl.pvLister.Get(vm.Name); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+		if err := ctrl.createPersistentVolume(vm); err != nil {
+			return err
+		}
+	}
+
+	if _, err := ctrl.pvcLister.PersistentVolumeClaims(common.NamespaceVM).Get(vm.Name); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+		if err := ctrl.createPersistentVolumeClaim(vm); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ctrl *VirtualMachineController) deleteLonghornVolume(vm *vmapi.VirtualMachine) error {
+	if vol, err := ctrl.lhClient.GetVolume(vm.Name); err != nil {
+		return err
+	} else if vol != nil {
+		if err := ctrl.lhClient.DeleteVolume(vm.Name); err != nil {
+			return err
+		}
+	}
+
+	if err := ctrl.kubeClient.CoreV1().PersistentVolumes().Delete(vm.Name, &metav1.DeleteOptions{}); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+
+	if err := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(common.NamespaceVM).Delete(vm.Name, &metav1.DeleteOptions{}); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ctrl *VirtualMachineController) createPersistentVolume(vm *vmapi.VirtualMachine) error {
+	_, err := ctrl.kubeClient.CoreV1().PersistentVolumes().Create(&corev1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: vm.Name,
+		},
+		Spec: corev1.PersistentVolumeSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Capacity: map[corev1.ResourceName]resource.Quantity{
+				corev1.ResourceStorage: resource.MustParse(vm.Spec.Volume.Longhorn.Size),
+			},
+			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
+			PersistentVolumeSource: corev1.PersistentVolumeSource{
+				CSI: &corev1.CSIPersistentVolumeSource{
+					Driver: "io.rancher.longhorn",
+					VolumeAttributes: map[string]string{
+						"frontend": "iscsi",
+					},
+					VolumeHandle: vm.Name,
+				},
+			},
+		},
+	})
+	return err
+}
+
+var noStorageClass = ""
+
+func (ctrl *VirtualMachineController) createPersistentVolumeClaim(vm *vmapi.VirtualMachine) error {
+	_, err := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(common.NamespaceVM).Create(&corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: vm.Name,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: map[corev1.ResourceName]resource.Quantity{
+					corev1.ResourceStorage: resource.MustParse(vm.Spec.Volume.Longhorn.Size),
+				},
+			},
+			StorageClassName: &noStorageClass,
+			VolumeName:       vm.Name,
+		},
+	})
+	return err
+}
+
+func (ctrl *VirtualMachineController) setTerminating(vm *vmapi.VirtualMachine) error {
+	vm2 := vm.DeepCopy()
+	vm2.Status.State = vmapi.StateTerminating
+	return ctrl.updateVMStatus(vm, vm2)
+}
+
+func (ctrl *VirtualMachineController) removeFinalizer(vm *vmapi.VirtualMachine) error {
+	vm2 := vm.DeepCopy()
+	vm2.Finalizers = []string{}
+	return ctrl.updateVMStatus(vm, vm2)
+}
+
+func (ctrl *VirtualMachineController) initSettings() error {
+	for name, definition := range vmapi.SettingDefinitions {
+		setting, err := ctrl.settingLister.Get(string(name))
+		if apierrors.IsNotFound(err) || setting == nil {
+			setting := &vmapi.Setting{
+				// I shouldn't have to set the type meta, what's wrong with the client?
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "vm.rancher.io/v1alpha1",
+					Kind:       "Setting",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: string(name),
+				},
+				Spec: vmapi.SettingSpec{
+					Value: definition.Default,
+				},
+			}
+			if _, err := ctrl.vmClient.VirtualmachineV1alpha1().Settings().Create(setting); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ctrl *VirtualMachineController) enqueueWork(queue workqueue.Interface, obj interface{}) {
+	// Beware of "xxx deleted" events
+	if unknown, ok := obj.(cache.DeletedFinalStateUnknown); ok && unknown.Obj != nil {
+		obj = unknown.Obj
+	}
+	objName, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	if err != nil {
+		glog.Errorf("failed to get key from object: %v", err)
+		return
+	}
+	queue.Add(objName)
+}
+
+func (ctrl *VirtualMachineController) updateVMPod(vm *vmapi.VirtualMachine) (vm2 *vmapi.VirtualMachine, pod *corev1.Pod, err error) {
+	vm2 = vm
+	pods, err := ctrl.podLister.Pods(common.NamespaceVM).List(labels.Set{
+		"app":  common.LabelApp,
+		"name": vm.Name,
+		"role": common.LabelRoleVM,
+	}.AsSelector())
+
+	if err != nil && !apierrors.IsNotFound(err) {
+		glog.V(2).Infof("Error getting vm pod(s) %s/%s: %v", common.NamespaceVM, vm.Name, err)
+		return
+	}
+
+	alivePods := GetAlivePods(pods)
+	switch len(alivePods) {
+	case 0:
+		if vm.Spec.Volume.Longhorn != nil {
+			pod = ctrl.createLonghornMachinePod(vm, false)
+		} else {
+			pod = ctrl.makeVMPod(vm, ctrl.bridgeIface, ctrl.noResourceLimits, false)
+		}
+		pod, err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(pod)
+		if err != nil {
+			glog.V(2).Infof("Error creating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, err)
+			return
+		}
+	case 1:
+		pod = alivePods[0]
+	default:
+		return
+	}
+
+	vm2 = vm.DeepCopy()
+	err = ctrl.updateVMStatusWithPod(vm, vm2, pod)
+	return
+}
+
+func (ctrl *VirtualMachineController) updateVMStatusWithPod(vm *vmapi.VirtualMachine, vm2 *vmapi.VirtualMachine, pod *corev1.Pod) error {
+	if pod.Spec.NodeName != "" {
+		vm2.Status.NodeName = pod.Spec.NodeName
+	}
+	if pod.Status.HostIP != "" {
+		vm2.Status.NodeIP = pod.Status.HostIP
+	}
+	switch {
+	case pod.DeletionTimestamp != nil:
+		vm2.Status.State = vmapi.StateStopping
+	case common.IsPodReady(pod):
+		vm2.Status.State = vmapi.StateRunning
+	default:
+		vm2.Status.State = vmapi.StatePending
+	}
+	return ctrl.updateVMStatus(vm, vm2)
+}
+
+func (ctrl *VirtualMachineController) updateVMStatus(current *vmapi.VirtualMachine, updated *vmapi.VirtualMachine) (err error) {
+	if !reflect.DeepEqual(current.Status, updated.Status) ||
+		!reflect.DeepEqual(current.Finalizers, updated.Finalizers) ||
+		!reflect.DeepEqual(current.Spec, updated.Spec) {
+		updated, err = ctrl.vmClient.VirtualmachineV1alpha1().VirtualMachines().Update(updated)
+	}
+	return
+}
+
+func (ctrl *VirtualMachineController) start(vm *vmapi.VirtualMachine) error {
+	vm, pod, err := ctrl.updateVMPod(vm)
+	if err != nil {
+		glog.Warningf("error updating vm pod %s/%s: %v", common.NamespaceVM, vm.Name, err)
+		return err
+	}
+
+	if pod != nil && pod.Name != "" {
+		if err = ctrl.updateNovnc(vm, pod.Name); err != nil {
+			glog.Warningf("error updating novnc %s/%s: %v", common.NamespaceVM, vm.Name, err)
+		}
+	}
+
+	// If vm is in pending state and pod is unschedulable, check to see if the
+	// requested node name matches the pod node affinity. If they are mismatched,
+	// delete the pod and allow the process to start over.
+	if vm.Status.State == vmapi.StatePending && pod != nil && IsPodUnschedulable(pod) {
+		if pod.Spec.Affinity != nil &&
+			pod.Spec.Affinity.NodeAffinity != nil &&
+			pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil &&
+			len(pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms) == 1 {
+
+			nodeSelector := pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+			if len(nodeSelector.NodeSelectorTerms) == 1 &&
+				len(nodeSelector.NodeSelectorTerms[0].MatchExpressions) == 1 {
+
+				requirement := nodeSelector.NodeSelectorTerms[0].MatchExpressions[0]
+				if requirement.Key == common.LabelNodeHostname &&
+					requirement.Operator == corev1.NodeSelectorOpIn &&
+					len(requirement.Values) == 1 &&
+					vm.Spec.NodeName != requirement.Values[0] {
+
+					glog.V(2).Infof("User modified selector for unschedulable vm %s", vm.Name)
+					return ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Delete(pod.Name, &metav1.DeleteOptions{})
+				}
+			}
+		}
+	}
+
+	if pod != nil && vm.Spec.NodeName != "" &&
+		vm.Spec.NodeName != pod.Spec.NodeName &&
+		vm.Status.State == vmapi.StateRunning ||
+		vm.Status.State == vmapi.StateMigrating {
+		return ctrl.migrateVM(vm)
+	}
+
+	return err
+}
+
+func (ctrl *VirtualMachineController) stop(vm *vmapi.VirtualMachine) (err error) {
+	vm2 := vm.DeepCopy()
+	vm2.Status.ISCSITarget = ""
+
+	if err = ctrl.deleteMachinePods(vm); err == nil {
+		vm2.Status.State = vmapi.StateStopping
+	} else if apierrors.IsNotFound(err) {
+		vm2.Status.State = vmapi.StateStopped
+		vm2.Status.NodeName = ""
+	} else {
+		vm2.Status.State = vmapi.StateError
+	}
+
+	if err = ctrl.deleteMigrationJob(vm); err == nil {
+		vm2.Status.State = vmapi.StateStopping
+	} else if !apierrors.IsNotFound(err) {
+		vm2.Status.State = vmapi.StateError
+	}
+
+	if err = ctrl.deleteConsolePod(vm); err == nil {
+		// if either the vm or novnc pod had to be deleted, we are stopping
+		vm2.Status.State = vmapi.StateStopping
+	} else if !apierrors.IsNotFound(err) {
+		vm2.Status.State = vmapi.StateError
+	}
+
+	err = ctrl.updateVMStatus(vm, vm2)
+	return
+}
+
+func (ctrl *VirtualMachineController) deleteMachinePods(vm *vmapi.VirtualMachine) error {
+	vmPodSelector := labels.Set{"name": vm.Name}.AsSelector()
+
+	pods, _ := ctrl.podLister.Pods(common.NamespaceVM).List(vmPodSelector)
+	if len(pods) == 0 {
+		return apierrors.NewNotFound(corev1.Resource("pods"), vm.Name+"-*")
+	}
+
+	return ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).DeleteCollection(
+		&metav1.DeleteOptions{},
+		metav1.ListOptions{LabelSelector: vmPodSelector.String()})
 }

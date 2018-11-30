@@ -389,7 +389,6 @@ func (ctrl *VirtualMachineController) process(vm *vmapi.VirtualMachine, keyObj i
 		var err error
 		switch vm.Spec.Action {
 		case vmapi.ActionStart:
-			// if vm.Spec.Volume.Longhorn != nil && vm.Status.ISCSITarget == "" {
 			if vm.Spec.Volume.Longhorn != nil {
 				if err := ctrl.createLonghornVolume(vm); err != nil {
 					return err
@@ -699,7 +698,6 @@ func (ctrl *VirtualMachineController) start(vm *vmapi.VirtualMachine) error {
 
 func (ctrl *VirtualMachineController) stop(vm *vmapi.VirtualMachine) (err error) {
 	vm2 := vm.DeepCopy()
-	vm2.Status.ISCSITarget = ""
 
 	if err = ctrl.deleteMachinePods(vm); err == nil {
 		vm2.Status.State = vmapi.StateStopping

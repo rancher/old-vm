@@ -1,6 +1,8 @@
 package vm
 
 import (
+	"strings"
+
 	"github.com/golang/glog"
 
 	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
@@ -35,7 +37,7 @@ func (ctrl *VirtualMachineController) updateLonghornClient() error {
 	if err != nil {
 		return err
 	}
-	endpoint := endpointSetting.Spec.Value
+	endpoint := strings.TrimSuffix(endpointSetting.Spec.Value, "/")
 
 	accessKeySetting, err := ctrl.settingLister.Get(string(vmapi.SettingNameLonghornAccessKey))
 	if err != nil {

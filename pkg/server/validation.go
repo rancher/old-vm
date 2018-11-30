@@ -63,3 +63,19 @@ func isValidInstanceCount(instanceCount int32) bool {
 func isValidNodeName(nodeName string) bool {
 	return true
 }
+
+func isValidVolume(volume vmapi.VolumeSource) bool {
+	if volume.Longhorn != nil && volume.EmptyDir == nil {
+		return volume.Longhorn.BaseImage != "" &&
+			volume.Longhorn.Size != "" &&
+			volume.Longhorn.NumberOfReplicas >= 2 &&
+			volume.Longhorn.NumberOfReplicas <= 10 &&
+			volume.Longhorn.StaleReplicaTimeout > 0
+	} else if volume.EmptyDir != nil && volume.Longhorn == nil {
+		return true
+	} else if volume.EmptyDir == nil && volume.Longhorn == nil {
+		// we assume emptyDir as default volume source for backwards compatibility
+		return true
+	}
+	return false
+}

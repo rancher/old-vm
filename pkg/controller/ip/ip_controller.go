@@ -29,14 +29,14 @@ type IPDiscoveryController struct {
 	vmLister        vmlisters.VirtualMachineLister
 	vmListerSynced  cache.InformerSynced
 	arpQueue        workqueue.RateLimitingInterface
-	nodeName        string
+	deviceName      string
 }
 
 func NewIPDiscoveryController(
 	crdClient vmclientset.Interface,
 	arpInformer vminformers.ARPTableInformer,
 	vmInformer vminformers.VirtualMachineInformer,
-	nodeName string,
+	deviceName string,
 ) *IPDiscoveryController {
 
 	ctrl := &IPDiscoveryController{
@@ -46,7 +46,7 @@ func NewIPDiscoveryController(
 		vmLister:        vmInformer.Lister(),
 		vmListerSynced:  vmInformer.Informer().HasSynced,
 		arpQueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtualmachine"),
-		nodeName:        nodeName,
+		deviceName:      deviceName,
 	}
 
 	arpInformer.Informer().AddEventHandler(
@@ -83,7 +83,7 @@ func periodically(t time.Duration, f func()) {
 	}
 }
 
-func (ctrl *IPDiscoveryController) updateVMs(arpTable *vmapi.ARPTable, nodeName string) error {
+func (ctrl *IPDiscoveryController) updateMachines(arpTable *vmapi.ARPTable) error {
 	vms, err := ctrl.vmLister.List(labels.Everything())
 	if err != nil {
 		return err
@@ -100,13 +100,13 @@ func (ctrl *IPDiscoveryController) updateVMs(arpTable *vmapi.ARPTable, nodeName 
 			if entry, ok := arpMap[vm.Status.MAC]; ok {
 				vm2 := vm.DeepCopy()
 				vm2.Status.IP = entry.IP
-				ctrl.updateVMStatus(vm, vm2)
+				ctrl.updateMachineStatus(vm, vm2)
 			}
 		} else {
 			if entry, ok := arpMap[vm.Status.MAC]; ok && entry.IP != vm.Status.IP {
 				vm2 := vm.DeepCopy()
 				vm2.Status.IP = entry.IP
-				ctrl.updateVMStatus(vm, vm2)
+				ctrl.updateMachineStatus(vm, vm2)
 			}
 		}
 	}
@@ -114,7 +114,7 @@ func (ctrl *IPDiscoveryController) updateVMs(arpTable *vmapi.ARPTable, nodeName 
 	return nil
 }
 
-func (ctrl *IPDiscoveryController) updateVMStatus(current *vmapi.VirtualMachine, updated *vmapi.VirtualMachine) (err error) {
+func (ctrl *IPDiscoveryController) updateMachineStatus(current *vmapi.VirtualMachine, updated *vmapi.VirtualMachine) (err error) {
 	if !reflect.DeepEqual(current.Status, updated.Status) {
 		updated, err = ctrl.crdClient.VirtualmachineV1alpha1().VirtualMachines().Update(updated)
 		glog.V(3).Infof("Updated vm %s", updated.Name)
@@ -130,18 +130,18 @@ func (ctrl *IPDiscoveryController) updateARPTable() {
 			Kind:       "ARPTable",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: ctrl.nodeName,
+			Name: ctrl.deviceName,
 		},
 		Spec: vmapi.ARPTableSpec{
 			Table: map[string]vmapi.ARPEntry{},
 		},
 	}
 
-	curTable, err := ctrl.arpLister.Get(ctrl.nodeName)
+	curTable, err := ctrl.arpLister.Get(ctrl.deviceName)
 	if err == nil {
 		newTable = curTable.DeepCopy()
 	} else if !apierrors.IsNotFound(err) {
-		glog.V(2).Infof("error getting arptable %s: %v", ctrl.nodeName, err)
+		glog.V(2).Infof("error getting arptable for device %s: %v", ctrl.deviceName, err)
 		return
 	}
 
@@ -219,14 +219,14 @@ func (ctrl *IPDiscoveryController) arpWorker() {
 		key := keyObj.(string)
 		glog.V(5).Infof("arpWorker[%s]", key)
 
-		_, nodeName, err := cache.SplitMetaNamespaceKey(key)
+		_, deviceName, err := cache.SplitMetaNamespaceKey(key)
 		if err != nil {
 			glog.V(4).Infof("error getting name of arptable %q to get arptable from informer: %v", key, err)
 			return false
 		}
-		arpMap, err := ctrl.arpLister.Get(nodeName)
+		arpMap, err := ctrl.arpLister.Get(deviceName)
 		if err == nil {
-			ctrl.updateVMs(arpMap, nodeName)
+			ctrl.updateMachines(arpMap)
 			return false
 		}
 		if !apierrors.IsNotFound(err) {

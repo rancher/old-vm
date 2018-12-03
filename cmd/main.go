@@ -34,7 +34,7 @@ func main() {
 
 	// ip-controller flags
 	ipCtrl := flag.Bool("ip", false, "Run the IP controller")
-	nodeName := flag.String("nodename", "", "Name of the node running the controller pod")
+	deviceName := flag.String("devicename", "br0", "Name of the device to store ARP entries for")
 
 	// rest-server flags
 	serv := flag.Bool("backend", false, "Run the REST server backend")
@@ -93,7 +93,7 @@ func main() {
 			vmClientset,
 			vmInformerFactory.Virtualmachine().V1alpha1().ARPTables(),
 			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
-			*nodeName,
+			*deviceName,
 		).Run(*workers, stopCh)
 	}
 

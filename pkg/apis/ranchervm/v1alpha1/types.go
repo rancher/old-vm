@@ -64,6 +64,7 @@ type EmptyDirVolumeSource struct{}
 
 type LonghornVolumeSource struct {
 	Size                string `json:"size"`
+	Frontend            string `json:"frontend"`
 	BaseImage           string `json:"base_image"`
 	NumberOfReplicas    int    `json:"number_of_replicas"`
 	StaleReplicaTimeout int    `json:"stale_replica_timeout"`

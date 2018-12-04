@@ -133,8 +133,8 @@ type Controller struct {
 func (c *LonghornClient) CreateVolume(vm *vmapi.VirtualMachine) error {
 	vol := &LonghornVolume{
 		Name:                vm.Name,
-		Frontend:            "iscsi",
 		Size:                vm.Spec.Volume.Longhorn.Size,
+		Frontend:            vm.Spec.Volume.Longhorn.Frontend,
 		BaseImage:           vm.Spec.Volume.Longhorn.BaseImage,
 		NumberOfReplicas:    vm.Spec.Volume.Longhorn.NumberOfReplicas,
 		StaleReplicaTimeout: vm.Spec.Volume.Longhorn.StaleReplicaTimeout,

@@ -46,7 +46,7 @@ func (ctrl *VirtualMachineController) updateNovncPod(vm *vmapi.VirtualMachine, p
 		}
 		fallthrough
 	default:
-		pod, err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(makeNovncPod(vm, podName))
+		pod, err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(ctrl.makeNovncPod(vm, podName))
 	}
 	return err
 }

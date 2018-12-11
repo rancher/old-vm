@@ -169,7 +169,8 @@ func (ctrl *VirtualMachineController) runMigrationJob(vm *vmapi.VirtualMachine, 
 		if !ok {
 			return false, errors.New(fmt.Sprintf("Missing migrate_port annotation on migration pod for vm %s", vm.Name))
 		}
-		job := qemu.NewMigrationJob(vm, oldPod.Name, fmt.Sprintf("tcp:%s:%s", newPod.Status.PodIP, migratePort))
+		targetURI := fmt.Sprintf("tcp:%s:%s", newPod.Status.PodIP, migratePort)
+		job := qemu.NewMigrationJob(vm, oldPod.Name, targetURI, ctrl.getImagePullSecrets())
 		job, err = ctrl.kubeClient.BatchV1().Jobs(common.NamespaceVM).Create(job)
 		return false, err
 	}

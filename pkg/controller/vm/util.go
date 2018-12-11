@@ -121,7 +121,8 @@ func (ctrl *VirtualMachineController) createLonghornMachinePod(vm *v1alpha1.Virt
 					},
 				},
 			},
-			HostNetwork: true,
+			HostNetwork:      true,
+			ImagePullSecrets: ctrl.getImagePullSecrets(),
 		},
 	}
 
@@ -139,6 +140,20 @@ func (ctrl *VirtualMachineController) createLonghornMachinePod(vm *v1alpha1.Virt
 	addNodeAffinity(pod, vm)
 
 	return pod
+}
+
+func (ctrl *VirtualMachineController) getImagePullSecrets() (refs []corev1.LocalObjectReference) {
+	registrySecrets, err := ctrl.settingLister.Get(string(v1alpha1.SettingNameRegistrySecrets))
+	if err == nil {
+		for _, registrySecret := range strings.Split(registrySecrets.Spec.Value, ",") {
+			refs = append(refs, corev1.LocalObjectReference{
+				Name: registrySecret,
+			})
+		}
+	} else {
+		glog.Warningf("Couldn't get registry secrets: %v", err)
+	}
+	return
 }
 
 var privileged = true
@@ -262,7 +277,8 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			Containers: []corev1.Container{
 				vmContainer,
 			},
-			HostNetwork: true,
+			HostNetwork:      true,
+			ImagePullSecrets: ctrl.getImagePullSecrets(),
 		},
 	}
 
@@ -406,7 +422,7 @@ func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {
 
 var noGracePeriod = int64(0)
 
-func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
+func (ctrl *VirtualMachineController) makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: vm.Name + "-novnc",
@@ -454,6 +470,7 @@ func makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 					},
 				},
 			},
+			ImagePullSecrets: ctrl.getImagePullSecrets(),
 		},
 	}
 }

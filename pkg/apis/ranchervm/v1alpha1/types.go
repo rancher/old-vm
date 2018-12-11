@@ -238,6 +238,9 @@ const (
 	SettingNameLonghornInsecureSkipVerify = SettingName("longhorn-insecure-skip-verify")
 	SettingNameLonghornAccessKey          = SettingName("longhorn-access-key")
 	SettingNameLonghornSecretKey          = SettingName("longhorn-secret-key")
+	SettingNameRegistryAddress            = SettingName("registry-address")
+	SettingNameRegistrySecrets            = SettingName("registry-secrets")
+	SettingNameRegistryInsecure           = SettingName("registry-insecure")
 )
 
 var (
@@ -246,13 +249,17 @@ var (
 		SettingNameLonghornInsecureSkipVerify,
 		SettingNameLonghornAccessKey,
 		SettingNameLonghornSecretKey,
+		SettingNameRegistryAddress,
+		SettingNameRegistrySecrets,
+		SettingNameRegistryInsecure,
 	}
 )
 
 type SettingCategory string
 
 const (
-	SettingCategoryStorage = SettingCategory("storage")
+	SettingCategoryStorage  = SettingCategory("storage")
+	SettingCategoryRegistry = SettingCategory("registry")
 )
 
 type SettingDefinition struct {
@@ -271,6 +278,9 @@ var (
 		SettingNameLonghornInsecureSkipVerify: SettingDefinitionLonghornInsecureSkipVerify,
 		SettingNameLonghornAccessKey:          SettingDefinitionLonghornAccessKey,
 		SettingNameLonghornSecretKey:          SettingDefinitionLonghornSecretKey,
+		SettingNameRegistryAddress:            SettingDefinitionRegistryAddress,
+		SettingNameRegistrySecrets:            SettingDefinitionRegistrySecrets,
+		SettingNameRegistryInsecure:           SettingDefinitionRegistryInsecure,
 	}
 
 	SettingDefinitionLonghornEndpoint = SettingDefinition{
@@ -306,6 +316,33 @@ var (
 		Description: "The Rancher API secret key for accessing Longhorn installation.",
 		Category:    SettingCategoryStorage,
 		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+
+	SettingDefinitionRegistryAddress = SettingDefinition{
+		DisplayName: "Registry Address",
+		Description: "Docker registry address in host:port form, used for pushing/pulling machine images",
+		Category:    SettingCategoryRegistry,
+		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+
+	SettingDefinitionRegistrySecrets = SettingDefinition{
+		DisplayName: "Registry Secrets",
+		Description: "Required for authenticated registries. Secret name(s) of docker-registry type, comma-delimited.",
+		Category:    SettingCategoryRegistry,
+		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+
+	SettingDefinitionRegistryInsecure = SettingDefinition{
+		DisplayName: "Insecure Registry",
+		Description: "Registry is insecure (HTTP). Requires manual Docker daemon configuration.",
+		Category:    SettingCategoryRegistry,
+		Type:        SettingTypeBool,
 		Required:    false,
 		ReadOnly:    false,
 	}

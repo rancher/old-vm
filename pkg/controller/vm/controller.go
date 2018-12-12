@@ -51,17 +51,20 @@ type VirtualMachineController struct {
 	pvcLister       corelisters.PersistentVolumeClaimLister
 	pvcListerSynced cache.InformerSynced
 
-	vmLister            vmlisters.VirtualMachineLister
-	vmListerSynced      cache.InformerSynced
-	credLister          vmlisters.CredentialLister
-	credListerSynced    cache.InformerSynced
-	settingLister       vmlisters.SettingLister
-	settingListerSynced cache.InformerSynced
+	vmLister                 vmlisters.VirtualMachineLister
+	vmListerSynced           cache.InformerSynced
+	credLister               vmlisters.CredentialLister
+	credListerSynced         cache.InformerSynced
+	settingLister            vmlisters.SettingLister
+	settingListerSynced      cache.InformerSynced
+	machineImageLister       vmlisters.MachineImageLister
+	machineImageListerSynced cache.InformerSynced
 
-	podQueue     workqueue.RateLimitingInterface
-	jobQueue     workqueue.RateLimitingInterface
-	vmQueue      workqueue.RateLimitingInterface
-	settingQueue workqueue.RateLimitingInterface
+	podQueue          workqueue.RateLimitingInterface
+	jobQueue          workqueue.RateLimitingInterface
+	vmQueue           workqueue.RateLimitingInterface
+	settingQueue      workqueue.RateLimitingInterface
+	machineImageQueue workqueue.RateLimitingInterface
 
 	bridgeIface      string
 	noResourceLimits bool
@@ -84,19 +87,21 @@ func NewVirtualMachineController(
 	vmInformer vminformers.VirtualMachineInformer,
 	credInformer vminformers.CredentialInformer,
 	settingInformer vminformers.SettingInformer,
+	machineImageInformer vminformers.MachineImageInformer,
 	bridgeIface string,
 	noResourceLimits bool,
 ) *VirtualMachineController {
 
 	ctrl := &VirtualMachineController{
-		vmClient:         vmClient,
-		kubeClient:       kubeClient,
-		vmQueue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtualmachine"),
-		podQueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "pod"),
-		jobQueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "job"),
-		settingQueue:     workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "setting"),
-		bridgeIface:      bridgeIface,
-		noResourceLimits: noResourceLimits,
+		vmClient:          vmClient,
+		kubeClient:        kubeClient,
+		vmQueue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtualmachine"),
+		podQueue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "pod"),
+		jobQueue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "job"),
+		settingQueue:      workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "setting"),
+		machineImageQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "machineimage"),
+		bridgeIface:       bridgeIface,
+		noResourceLimits:  noResourceLimits,
 	}
 
 	podInformer.Informer().AddEventHandler(
@@ -137,6 +142,14 @@ func NewVirtualMachineController(
 		},
 	)
 
+	machineImageInformer.Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { ctrl.enqueueWork(ctrl.machineImageQueue, obj) },
+			UpdateFunc: func(oldObj, newObj interface{}) { ctrl.enqueueWork(ctrl.machineImageQueue, newObj) },
+			DeleteFunc: func(obj interface{}) { ctrl.enqueueWork(ctrl.machineImageQueue, obj) },
+		},
+	)
+
 	ctrl.podLister = podInformer.Lister()
 	ctrl.podListerSynced = podInformer.Informer().HasSynced
 
@@ -160,6 +173,9 @@ func NewVirtualMachineController(
 
 	ctrl.settingLister = settingInformer.Lister()
 	ctrl.settingListerSynced = settingInformer.Informer().HasSynced
+
+	ctrl.machineImageLister = machineImageInformer.Lister()
+	ctrl.machineImageListerSynced = machineImageInformer.Informer().HasSynced
 
 	return ctrl
 }
@@ -217,6 +233,7 @@ func (ctrl *VirtualMachineController) run(stopCh <-chan struct{}) {
 	defer ctrl.podQueue.ShutDown()
 	defer ctrl.jobQueue.ShutDown()
 	defer ctrl.settingQueue.ShutDown()
+	defer ctrl.machineImageQueue.ShutDown()
 
 	glog.Infof("starting vm controller")
 	defer glog.Infof("stopping vm controller")
@@ -225,7 +242,7 @@ func (ctrl *VirtualMachineController) run(stopCh <-chan struct{}) {
 		ctrl.jobListerSynced, ctrl.svcListerSynced,
 		ctrl.pvListerSynced, ctrl.pvcListerSynced,
 		ctrl.vmListerSynced, ctrl.credListerSynced,
-		ctrl.settingListerSynced) {
+		ctrl.settingListerSynced, ctrl.machineImageListerSynced) {
 		return
 	}
 
@@ -240,6 +257,7 @@ func (ctrl *VirtualMachineController) run(stopCh <-chan struct{}) {
 	go wait.Until(ctrl.podWorker, time.Second, stopCh)
 	go wait.Until(ctrl.jobWorker, time.Second, stopCh)
 	go wait.Until(ctrl.settingWorker, time.Second, stopCh)
+	go wait.Until(ctrl.machineImageWorker, time.Second, stopCh)
 
 	<-stopCh
 }
@@ -300,17 +318,27 @@ func (ctrl *VirtualMachineController) podWorker() {
 			return false
 		}
 
-		vmName := name[:strings.LastIndex(name, common.NameDelimiter)]
-
-		_, err = ctrl.podLister.Pods(ns).Get(name)
-		if err == nil {
-			glog.V(5).Infof("enqueued vm %q for sync", vmName)
-			ctrl.vmQueue.Add(vmName)
-		} else if apierrors.IsNotFound(err) {
-			glog.V(5).Infof("enqueued vm %q for sync", vmName)
-			ctrl.vmQueue.Add(vmName)
-		} else {
+		pod, err := ctrl.podLister.Pods(ns).Get(name)
+		if err != nil {
 			glog.Warningf("error getting pod %q from informer: %v", key, err)
+			return false
+		}
+
+		if pod != nil {
+			if role, ok := pod.Labels["role"]; ok {
+				switch role {
+				case common.LabelRoleVM:
+					fallthrough
+				case common.LabelRoleNoVNC:
+					vmName := name[:strings.LastIndex(name, common.NameDelimiter)]
+					ctrl.vmQueue.Add(vmName)
+					glog.V(5).Infof("enqueued vm %q for sync", vmName)
+				case common.LabelRoleMigrate:
+				case common.LabelRoleMachineImage:
+					ctrl.machineImageQueue.Add(name)
+					glog.V(5).Infof("enqueued machineImage %q for sync", name)
+				}
+			}
 		}
 
 		return false

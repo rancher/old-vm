@@ -83,6 +83,7 @@ func main() {
 			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Credentials(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Settings(),
+			vmInformerFactory.Virtualmachine().V1alpha1().MachineImages(),
 			*bridgeIface,
 			*noResourceLimits,
 		).Run()
@@ -104,6 +105,7 @@ func main() {
 			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
 			kubeInformerFactory.Core().V1().Nodes(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Credentials(),
+			vmInformerFactory.Virtualmachine().V1alpha1().MachineImages(),
 			*listenAddress,
 		).Run(stopCh)
 	}

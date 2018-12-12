@@ -26,6 +26,10 @@ type ARPTableListerExpansion interface{}
 // CredentialLister.
 type CredentialListerExpansion interface{}
 
+// MachineImageListerExpansion allows custom methods to be added to
+// MachineImageLister.
+type MachineImageListerExpansion interface{}
+
 // SettingListerExpansion allows custom methods to be added to
 // SettingLister.
 type SettingListerExpansion interface{}

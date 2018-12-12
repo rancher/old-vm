@@ -51,12 +51,14 @@ type server struct {
 	vmClient   vmclientset.Interface
 	kubeClient kubernetes.Interface
 
-	vmLister         vmlisters.VirtualMachineLister
-	vmListerSynced   cache.InformerSynced
-	nodeLister       corelisters.NodeLister
-	nodeListerSynced cache.InformerSynced
-	credLister       vmlisters.CredentialLister
-	credListerSynced cache.InformerSynced
+	vmLister                 vmlisters.VirtualMachineLister
+	vmListerSynced           cache.InformerSynced
+	nodeLister               corelisters.NodeLister
+	nodeListerSynced         cache.InformerSynced
+	credLister               vmlisters.CredentialLister
+	credListerSynced         cache.InformerSynced
+	machineImageLister       vmlisters.MachineImageLister
+	machineImageListerSynced cache.InformerSynced
 
 	listenAddress string
 	watchers      []*Watcher
@@ -69,6 +71,7 @@ func NewServer(
 	vmInformer vminformers.VirtualMachineInformer,
 	nodeInformer coreinformers.NodeInformer,
 	credInformer vminformers.CredentialInformer,
+	machineImageInformer vminformers.MachineImageInformer,
 	listenAddress string,
 ) *server {
 
@@ -76,12 +79,14 @@ func NewServer(
 		vmClient:   vmClient,
 		kubeClient: kubeClient,
 
-		vmLister:         vmInformer.Lister(),
-		vmListerSynced:   vmInformer.Informer().HasSynced,
-		nodeLister:       nodeInformer.Lister(),
-		nodeListerSynced: nodeInformer.Informer().HasSynced,
-		credLister:       credInformer.Lister(),
-		credListerSynced: credInformer.Informer().HasSynced,
+		vmLister:                 vmInformer.Lister(),
+		vmListerSynced:           vmInformer.Informer().HasSynced,
+		nodeLister:               nodeInformer.Lister(),
+		nodeListerSynced:         nodeInformer.Informer().HasSynced,
+		credLister:               credInformer.Lister(),
+		credListerSynced:         credInformer.Informer().HasSynced,
+		machineImageLister:       machineImageInformer.Lister(),
+		machineImageListerSynced: machineImageInformer.Informer().HasSynced,
 
 		listenAddress: listenAddress,
 		watchers:      []*Watcher{},
@@ -90,12 +95,14 @@ func NewServer(
 	vmInformer.Informer().AddEventHandler(s.notifyWatchersHandler("virtualmachine"))
 	nodeInformer.Informer().AddEventHandler(s.notifyWatchersHandler("node"))
 	credInformer.Informer().AddEventHandler(s.notifyWatchersHandler("credential"))
+	machineImageInformer.Informer().AddEventHandler(s.notifyWatchersHandler("machineimage"))
 
 	return s
 }
 
 func (s *server) Run(stopCh <-chan struct{}) {
-	if !cache.WaitForCacheSync(stopCh, s.vmListerSynced, s.nodeListerSynced, s.credListerSynced) {
+	if !cache.WaitForCacheSync(stopCh, s.vmListerSynced, s.nodeListerSynced,
+		s.credListerSynced, s.machineImageListerSynced) {
 		return
 	}
 
@@ -179,6 +186,11 @@ func (s *server) newRouter() *mux.Router {
 	credentialListStream := NewStreamHandlerFunc(credentialWatcher, s.credentialList)
 	r.Path("/v1/ws/credential").Handler(http.HandlerFunc(credentialListStream))
 	r.Path("/v1/ws/{period}/credential").Handler(http.HandlerFunc(credentialListStream))
+
+	r.Methods("GET").Path("/v1/machineimage").Handler(http.HandlerFunc(s.MachineImageList))
+	r.Methods("POST").Path("/v1/machineimage").Handler(http.HandlerFunc(s.MachineImageCreate))
+	r.Methods("GET").Path("/v1/machineimage/{name}").Handler(http.HandlerFunc(s.MachineImageGet))
+	r.Methods("DELETE").Path("/v1/machineimage/{name}").Handler(http.HandlerFunc(s.MachineImageDelete))
 
 	return r
 }

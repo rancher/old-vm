@@ -28,6 +28,8 @@ type Interface interface {
 	ARPTables() ARPTableInformer
 	// Credentials returns a CredentialInformer.
 	Credentials() CredentialInformer
+	// MachineImages returns a MachineImageInformer.
+	MachineImages() MachineImageInformer
 	// Settings returns a SettingInformer.
 	Settings() SettingInformer
 	// VirtualMachines returns a VirtualMachineInformer.
@@ -53,6 +55,11 @@ func (v *version) ARPTables() ARPTableInformer {
 // Credentials returns a CredentialInformer.
 func (v *version) Credentials() CredentialInformer {
 	return &credentialInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// MachineImages returns a MachineImageInformer.
+func (v *version) MachineImages() MachineImageInformer {
+	return &machineImageInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Settings returns a SettingInformer.

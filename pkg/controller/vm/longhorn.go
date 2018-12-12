@@ -10,7 +10,6 @@ import (
 	"net/http"
 
 	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
-	vmlisters "github.com/rancher/vm/pkg/client/listers/ranchervm/v1alpha1"
 )
 
 type LonghornClient struct {
@@ -31,34 +30,6 @@ func NewLonghornClient(endpoint, accessKey, secretKey string, insecureSkipVerify
 	}
 
 	return &LonghornClient{client, endpoint, accessKey, secretKey}
-}
-
-func NewLonghornClientFromSettings(settingLister vmlisters.SettingLister) (*LonghornClient, error) {
-	endpointSetting, err := settingLister.Get(string(vmapi.SettingNameLonghornEndpoint))
-	if err != nil {
-		return nil, err
-	}
-	endpoint := endpointSetting.Spec.Value
-
-	insecureSkipVerifySetting, err := settingLister.Get(string(vmapi.SettingNameLonghornInsecureSkipVerify))
-	if err != nil {
-		return nil, err
-	}
-	insecureSkipVerify := insecureSkipVerifySetting.Spec.Value == "true"
-
-	accessKeySetting, err := settingLister.Get(string(vmapi.SettingNameLonghornAccessKey))
-	if err != nil {
-		return nil, err
-	}
-	accessKey := accessKeySetting.Spec.Value
-
-	secretKeySetting, err := settingLister.Get(string(vmapi.SettingNameLonghornSecretKey))
-	if err != nil {
-		return nil, err
-	}
-	secretKey := secretKeySetting.Spec.Value
-
-	return NewLonghornClient(endpoint, accessKey, secretKey, insecureSkipVerify), nil
 }
 
 func (c *LonghornClient) get(path string) (*http.Response, error) {
@@ -109,6 +80,115 @@ func (c *LonghornClient) delete(path string) (*http.Response, error) {
 		req.SetBasicAuth(c.accessKey, c.secretKey)
 	}
 	return c.client.Do(req)
+}
+
+type CreateSnapshotRequest struct{}
+type CreateSnapshotResponse struct {
+	Name string `json:"name"`
+	Size string `json:"size"`
+}
+
+func (c *LonghornClient) CreateSnapshot(name string) (*CreateSnapshotResponse, error) {
+	req := &CreateSnapshotRequest{}
+
+	buf, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.post("/v1/volumes/"+name+"?action=snapshotCreate", bytes.NewReader(buf))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		buf, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		var cs CreateSnapshotResponse
+		if err := json.Unmarshal(buf, &cs); err != nil {
+			return nil, err
+		}
+		return &cs, nil
+	}
+	return nil, fmt.Errorf("CreateSnapshot failed: %v", resp.Status)
+}
+
+type CreateBackupRequest struct {
+	SnapshotName string `json:"name"`
+}
+
+func (c *LonghornClient) CreateBackup(volumeName, snapshotName string) error {
+	req := &CreateBackupRequest{
+		SnapshotName: snapshotName,
+	}
+
+	buf, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.post("/v1/volumes/"+volumeName+"?action=snapshotBackup", bytes.NewReader(buf))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("CreateBackup failed: %v", resp.Status)
+	}
+	return nil
+}
+
+type BackupListResponse struct {
+	Items []*BackupVolume `json:"data"`
+}
+
+type BackupVolume struct {
+	Name         string            `json:"name"`
+	SnapshotName string            `json:"snapshotName"`
+	VolumeName   string            `json:"volumeName"`
+	URL          string            `json:"url"`
+	Labels       map[string]string `json:"labels"`
+}
+
+func (c *LonghornClient) GetBackup(volumeName, snapshotName string) (*BackupVolume, error) {
+	list, err := c.GetBackupList(volumeName)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(list.Items) == 0 {
+		return nil, nil
+	}
+
+	return list.Items[0], nil
+}
+
+func (c *LonghornClient) GetBackupList(volumeName string) (*BackupListResponse, error) {
+	resp, err := c.post("/v1/backupvolumes/"+volumeName+"?action=backupList", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		buf, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		var bl BackupListResponse
+		if err := json.Unmarshal(buf, &bl); err != nil {
+			return nil, err
+		}
+		return &bl, nil
+	}
+
+	return nil, nil
 }
 
 type LonghornVolume struct {

@@ -143,13 +143,11 @@ func (ctrl *VirtualMachineController) createLonghornMachinePod(vm *v1alpha1.Virt
 }
 
 func (ctrl *VirtualMachineController) getImagePullSecrets() (refs []corev1.LocalObjectReference) {
-	registrySecrets, err := ctrl.settingLister.Get(string(v1alpha1.SettingNameRegistrySecrets))
+	registrySecret, err := ctrl.settingLister.Get(string(v1alpha1.SettingNameRegistrySecret))
 	if err == nil {
-		for _, registrySecret := range strings.Split(registrySecrets.Spec.Value, ",") {
-			refs = append(refs, corev1.LocalObjectReference{
-				Name: registrySecret,
-			})
-		}
+		refs = append(refs, corev1.LocalObjectReference{
+			Name: registrySecret.Spec.Value,
+		})
 	} else {
 		glog.Warningf("Couldn't get registry secrets: %v", err)
 	}

@@ -26,7 +26,7 @@ func (ctrl *VirtualMachineController) settingWorker() {
 	}
 	for {
 		if quit := workFunc(); quit {
-			glog.Infof("pod worker queue shutting down")
+			glog.Infof("setting worker queue shutting down")
 			return
 		}
 	}

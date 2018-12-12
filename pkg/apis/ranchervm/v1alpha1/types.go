@@ -198,6 +198,43 @@ type CredentialList struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// MachineImage is a virtual machine image packaged in a Docker image
+type MachineImage struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   MachineImageSpec   `json:"spec"`
+	Status MachineImageStatus `json:"status"`
+}
+
+type MachineImageSpec struct {
+	DockerImage        string `json:"docker_image"`
+	SizeGiB            int    `json:"size_gib"`
+	FromVirtualMachine string `json:"from_vm"`
+}
+
+type MachineImageStatus struct {
+	Snapshot  string `json:"snapshot"`
+	BackupURL string `json:"backup_url"`
+	BaseImage string `json:"base_image"`
+	Published bool   `json:"published"`
+	Ready     bool   `json:"ready"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+type MachineImageList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []MachineImage `json:"items"`
+}
+
+// +genclient
+// +genclient:noStatus
+// +genclient:nonNamespaced
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
 // Setting is a generic RancherVM setting
 type Setting struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -239,7 +276,7 @@ const (
 	SettingNameLonghornAccessKey          = SettingName("longhorn-access-key")
 	SettingNameLonghornSecretKey          = SettingName("longhorn-secret-key")
 	SettingNameRegistryAddress            = SettingName("registry-address")
-	SettingNameRegistrySecrets            = SettingName("registry-secrets")
+	SettingNameRegistrySecret             = SettingName("registry-secret")
 	SettingNameRegistryInsecure           = SettingName("registry-insecure")
 )
 
@@ -250,7 +287,7 @@ var (
 		SettingNameLonghornAccessKey,
 		SettingNameLonghornSecretKey,
 		SettingNameRegistryAddress,
-		SettingNameRegistrySecrets,
+		SettingNameRegistrySecret,
 		SettingNameRegistryInsecure,
 	}
 )
@@ -279,7 +316,7 @@ var (
 		SettingNameLonghornAccessKey:          SettingDefinitionLonghornAccessKey,
 		SettingNameLonghornSecretKey:          SettingDefinitionLonghornSecretKey,
 		SettingNameRegistryAddress:            SettingDefinitionRegistryAddress,
-		SettingNameRegistrySecrets:            SettingDefinitionRegistrySecrets,
+		SettingNameRegistrySecret:             SettingDefinitionRegistrySecret,
 		SettingNameRegistryInsecure:           SettingDefinitionRegistryInsecure,
 	}
 
@@ -329,9 +366,9 @@ var (
 		ReadOnly:    false,
 	}
 
-	SettingDefinitionRegistrySecrets = SettingDefinition{
-		DisplayName: "Registry Secrets",
-		Description: "Required for authenticated registries. Secret name(s) of docker-registry type, comma-delimited.",
+	SettingDefinitionRegistrySecret = SettingDefinition{
+		DisplayName: "Registry Secret",
+		Description: "Required for authenticated registries. Secret name of docker-registry type.",
 		Category:    SettingCategoryRegistry,
 		Type:        SettingTypeString,
 		Required:    false,

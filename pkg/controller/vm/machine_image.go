@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/golang/glog"
@@ -19,16 +20,7 @@ import (
 	"github.com/rancher/vm/pkg/common"
 )
 
-const (
-	// TODO store in settings
-	// TODO register engine image as a machine image to distribute it
-	LonghornEngineImage   = "llparse/longhorn-engine:df56c7e-dirty"
-	KanikoImage           = "gcr.io/kaniko-project/executor:debug"
-	MinimumNodeReadyCount = 3
-
-	DockerContextDir = "/workspace"
-	ContainerName    = "create-image"
-)
+const DockerContextDir = "/workspace"
 
 var Privileged = true
 
@@ -65,31 +57,52 @@ func (ctrl *VirtualMachineController) machineImageWorker() {
 func (ctrl *VirtualMachineController) processMachineImage(name string) error {
 	machineImage, err := ctrl.machineImageLister.Get(name)
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
 		return err
 	}
 
-	// TODO pull the VM CRD to ensure Longhorn-backed
 	if machineImage.Spec.FromVirtualMachine != "" {
+		machine, err := ctrl.vmLister.Get(machineImage.Spec.FromVirtualMachine)
+		if err != nil {
+			return err
+		}
+
+		if machine.Spec.Volume.Longhorn == nil {
+			err := errors.New(fmt.Sprintf("machine (%s) referenced by machine image (%s) missing Longhorn volume (%+v)",
+				machine.Name, machineImage.Name, machine.Spec.Volume))
+			glog.Error(err)
+			return err
+		}
+
 		if machineImage.Status.Snapshot == "" {
+			if machineImage.Status.State != api.MachineImageSnapshot {
+				return ctrl.setMachineImageState(machineImage, api.MachineImageSnapshot)
+			}
 			return ctrl.createSnapshot(machineImage)
 		}
 
 		if machineImage.Status.BackupURL == "" {
+			if machineImage.Status.State != api.MachineImageBackup {
+				return ctrl.setMachineImageState(machineImage, api.MachineImageBackup)
+			}
 			return ctrl.createBackup(machineImage)
 		}
 
 		if !machineImage.Status.Published {
+			if machineImage.Status.State != api.MachineImagePublish {
+				return ctrl.setMachineImageState(machineImage, api.MachineImagePublish)
+			}
 			return ctrl.publishImage(machineImage)
 		}
 	} else {
 		if !machineImage.Status.Published {
-			// TODO ensure published
 			return ctrl.setMachineImagePublished(machineImage)
 		}
 	}
 
-	// TODO reassess machine image readiness when nodes enter/leave cluster
-	return ctrl.prepareNodes(machineImage)
+	return ctrl.provisionNodes(machineImage)
 }
 
 func (ctrl *VirtualMachineController) createSnapshot(machineImage *api.MachineImage) error {
@@ -112,9 +125,14 @@ func (ctrl *VirtualMachineController) createBackup(machineImage *api.MachineImag
 		return err
 	}
 	if backup == nil {
-		return ctrl.lhClient.CreateBackup(volumeName, snapshotName)
+		if err := ctrl.lhClient.CreateBackup(volumeName, snapshotName); err != nil {
+			return err
+		}
+		backup, err = ctrl.lhClient.GetBackup(volumeName, snapshotName)
+		if err != nil {
+			return err
+		}
 	}
-
 	u, err := url.Parse(backup.URL)
 	if err != nil {
 		return err
@@ -139,12 +157,14 @@ func (ctrl *VirtualMachineController) publishImage(machineImage *api.MachineImag
 	publishPodName := getPublishImagePodName(machineImage)
 	pod, err := ctrl.podLister.Pods(common.NamespaceVM).Get(publishPodName)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			pod = ctrl.getPublishImagePod(machineImage)
-			if pod, err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(pod); err != nil {
-				return err
-			}
-		} else {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+		pod, err = ctrl.getPublishImagePod(machineImage)
+		if err != nil {
+			return err
+		}
+		if pod, err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(pod); err != nil {
 			return err
 		}
 	}
@@ -166,7 +186,7 @@ func (ctrl *VirtualMachineController) publishImage(machineImage *api.MachineImag
 	return nil
 }
 
-func (ctrl *VirtualMachineController) prepareNodes(machineImage *api.MachineImage) error {
+func (ctrl *VirtualMachineController) provisionNodes(machineImage *api.MachineImage) error {
 	nodes, err := ctrl.nodeLister.List(labels.Everything())
 	if err != nil {
 		return err
@@ -197,12 +217,9 @@ func (ctrl *VirtualMachineController) prepareNodes(machineImage *api.MachineImag
 					return err
 				}
 			case v1.PodFailed:
-				glog.Warningf("Pull image pod failed: %+v", pod.Status)
-				if err := ctrl.kubeClient.CoreV1().Pods(pod.Namespace).Delete(pod.Name, &metav1.DeleteOptions{}); err != nil {
-					return err
-				}
+				fallthrough
 			case v1.PodUnknown:
-				glog.Warningf("Pull image pod unknown: %+v", pod.Status)
+				glog.Warningf("Pull image pod error: %+v", pod.Status)
 				if err := ctrl.kubeClient.CoreV1().Pods(pod.Namespace).Delete(pod.Name, &metav1.DeleteOptions{}); err != nil {
 					return err
 				}
@@ -221,21 +238,47 @@ func (ctrl *VirtualMachineController) prepareNodes(machineImage *api.MachineImag
 		}
 	}
 
-	nodeReadyCount := len(nodesReady)
-	machineImageReady := false
-	// TODO consider nodes in the MachineImage CRD that are no longer in the cluster
-	if nodeReadyCount >= MinimumNodeReadyCount || nodeReadyCount == len(nodes) {
-		machineImageReady = true
+	var newNodeNames []string
+	for _, nodeName := range nodesReady {
+		exists := false
+		for _, existing := range machineImage.Status.Nodes {
+			if existing == nodeName {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			newNodeNames = append(newNodeNames, nodeName)
+		}
+	}
+	if len(newNodeNames) > 0 {
+		return ctrl.addNodesReady(machineImage, newNodeNames...)
 	}
 
-	if err := ctrl.addNodesPulledMachineImage(machineImage, machineImageReady, nodesReady...); err != nil {
+	nodeReadyCount := len(nodesReady)
+
+	minimumAvailability, err := ctrl.settingLister.Get(string(api.SettingNameImageMinimumAvailability))
+	if err != nil {
 		return err
 	}
-	if !machineImageReady {
-		err = fmt.Errorf("(%d/%d) nodes containing image (%s), need at least %d",
-			nodeReadyCount, len(nodes), machineImage.Spec.DockerImage, MinimumNodeReadyCount)
+	minNodeReadyCount, err := strconv.Atoi(minimumAvailability.Spec.Value)
+	if err != nil {
+		return err
 	}
-	return err
+
+	if nodeReadyCount >= minNodeReadyCount || nodeReadyCount == len(nodes) {
+		if machineImage.Status.State != api.MachineImageReady {
+			return ctrl.setMachineImageState(machineImage, api.MachineImageReady)
+		}
+	} else {
+		if machineImage.Status.State != api.MachineImageProvision {
+			return ctrl.setMachineImageState(machineImage, api.MachineImageProvision)
+		}
+		// FIXME shouldn't be an error, just a healthy loop termination (and V(5) log event)
+		return fmt.Errorf("(%d/%d) nodes containing image (%s), need at least %d",
+			nodeReadyCount, len(nodes), machineImage.Spec.DockerImage, minNodeReadyCount)
+	}
+	return nil
 }
 
 func getPullImagePodName(machineImage *api.MachineImage, node *v1.Node) string {
@@ -293,27 +336,16 @@ func (ctrl *VirtualMachineController) setMachineImagePublished(machineImage *api
 	return
 }
 
-func (ctrl *VirtualMachineController) addNodesPulledMachineImage(machineImage *api.MachineImage, machineImageReady bool, nodeNames ...string) (err error) {
-	var newNodeNames []string
-	for _, nodeName := range nodeNames {
-		exists := false
-		for _, existing := range machineImage.Status.Nodes {
-			if existing == nodeName {
-				exists = true
-				break
-			}
-		}
-		if !exists {
-			newNodeNames = append(newNodeNames, nodeName)
-		}
-	}
-	if len(newNodeNames) == 0 {
-		return nil
-	}
-
+func (ctrl *VirtualMachineController) setMachineImageState(machineImage *api.MachineImage, state api.MachineImageState) (err error) {
 	mutable := machineImage.DeepCopy()
-	mutable.Status.Nodes = append(mutable.Status.Nodes, newNodeNames...)
-	mutable.Status.Ready = machineImageReady
+	mutable.Status.State = state
+	mutable, err = ctrl.vmClient.VirtualmachineV1alpha1().MachineImages().Update(mutable)
+	return
+}
+
+func (ctrl *VirtualMachineController) addNodesReady(machineImage *api.MachineImage, nodeNames ...string) (err error) {
+	mutable := machineImage.DeepCopy()
+	mutable.Status.Nodes = append(mutable.Status.Nodes, nodeNames...)
 	sort.Strings(mutable.Status.Nodes)
 	mutable, err = ctrl.vmClient.VirtualmachineV1alpha1().MachineImages().Update(mutable)
 	return
@@ -323,15 +355,25 @@ func getPublishImagePodName(machineImage *api.MachineImage) string {
 	return "publish-" + machineImage.Name
 }
 
-func (ctrl *VirtualMachineController) getPublishImagePod(machineImage *api.MachineImage) (pod *v1.Pod) {
-	imageName := machineImage.Spec.DockerImage
+func (ctrl *VirtualMachineController) getPublishImagePod(machineImage *api.MachineImage) (*v1.Pod, error) {
+	longhornImage, err := ctrl.settingLister.Get(string(api.SettingNameImageLonghornEngine))
+	if err != nil {
+		return nil, err
+	}
+
+	kanikoImage, err := ctrl.settingLister.Get(string(api.SettingNameImageKaniko))
+	if err != nil {
+		return nil, err
+	}
 
 	filename := "base.qcow2"
+	createDockerfile := fmt.Sprintf("echo -e 'FROM busybox\\nCOPY %s /base_image/'"+
+		" > %s/Dockerfile", filename, DockerContextDir)
 	outputFile := filepath.Join(DockerContextDir, filename)
 
 	glog.V(3).Infof("Creating pod %s/%s", common.NamespaceVM, machineImage.Name)
 
-	pod = &v1.Pod{
+	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: getPublishImagePodName(machineImage),
 			Labels: map[string]string{
@@ -351,12 +393,9 @@ func (ctrl *VirtualMachineController) getPublishImagePod(machineImage *api.Machi
 			},
 			InitContainers: []v1.Container{
 				{
-					Name:  "create-dockerfile",
-					Image: LonghornEngineImage,
-					Command: []string{"/bin/sh", "-c", fmt.Sprintf(
-						"echo 'FROM busybox\\nCOPY %s /base_image/' > %s/Dockerfile",
-						filename, DockerContextDir,
-					)},
+					Name:    "create-dockerfile",
+					Image:   kanikoImage.Spec.Value,
+					Command: []string{"/busybox/sh", "-c", createDockerfile},
 					VolumeMounts: []v1.VolumeMount{
 						{
 							Name:      "docker-context",
@@ -366,70 +405,78 @@ func (ctrl *VirtualMachineController) getPublishImagePod(machineImage *api.Machi
 				},
 			},
 			Containers: []v1.Container{
-				{
-					Name:  ContainerName,
-					Image: LonghornEngineImage,
-					Command: []string{"/bin/sh", "-c", fmt.Sprintf(
-						"longhorn restore-to --backup-url '%s' --output-file '%s'; touch %s/.ready",
-						machineImage.Status.BackupURL, outputFile, DockerContextDir)},
-					VolumeMounts: []v1.VolumeMount{
-						{
-							Name:      "docker-context",
-							MountPath: DockerContextDir,
-						},
-					},
-					SecurityContext: &v1.SecurityContext{
-						Privileged: &Privileged,
-					},
-				},
-				{
-					Name:  "kaniko",
-					Image: KanikoImage,
-					Command: []string{"/busybox/sh", "-c", fmt.Sprintf(
-						"while true; do if [ -f %s/.ready ]; then break; else sleep 1; fi; done; "+
-							"/kaniko/executor --dockerfile=Dockerfile --destination=%s", DockerContextDir, imageName)},
-					VolumeMounts: []v1.VolumeMount{
-						{
-							Name:      "docker-context",
-							MountPath: DockerContextDir,
-						},
-					},
-				},
+				ctrl.getLonghornContainer(machineImage, longhornImage, outputFile),
+				ctrl.getKanikoContainer(machineImage, kanikoImage),
 			},
 			RestartPolicy: v1.RestartPolicyNever,
 		},
 	}
 
-	ctrl.addRegistryInsecureFlag(pod)
+	if err := ctrl.addRegistryInsecureFlag(pod); err != nil {
+		return nil, err
+	}
 
-	ctrl.addRegistrySecret(pod)
+	if err := ctrl.addRegistrySecret(pod); err != nil {
+		return nil, err
+	}
 
 	ctrl.addBaseImage(pod, machineImage, outputFile)
 
-	return
+	return pod, nil
 }
 
-func (ctrl *VirtualMachineController) addRegistryInsecureFlag(pod *v1.Pod) {
-	registryInsecureString, err := ctrl.settingLister.Get(string(api.SettingNameRegistryInsecure))
-	if registryInsecureString == nil {
-		if err != nil {
-			glog.Warning(err)
-		}
-		return
+func (ctrl *VirtualMachineController) getLonghornContainer(machineImage *api.MachineImage, longhornImage *api.Setting, outputFile string) v1.Container {
+	return v1.Container{
+		Name:  "longhorn",
+		Image: longhornImage.Spec.Value,
+		Command: []string{"/bin/sh", "-c", fmt.Sprintf(
+			"longhorn restore-to --backup-url '%s' --output-file '%s'; touch %s/.ready",
+			machineImage.Status.BackupURL, outputFile, DockerContextDir)},
+		VolumeMounts: []v1.VolumeMount{
+			{
+				Name:      "docker-context",
+				MountPath: DockerContextDir,
+			},
+		},
+		SecurityContext: &v1.SecurityContext{
+			Privileged: &Privileged,
+		},
+	}
+}
+
+func (ctrl *VirtualMachineController) getKanikoContainer(machineImage *api.MachineImage, kanikoImage *api.Setting) v1.Container {
+	return v1.Container{
+		Name:  "kaniko",
+		Image: kanikoImage.Spec.Value,
+		Command: []string{"/busybox/sh", "-c", fmt.Sprintf(
+			"while true; do if [ -f %s/.ready ]; then break; else sleep 1; fi; done; "+
+				"/kaniko/executor --dockerfile=Dockerfile --destination=%s",
+			DockerContextDir, machineImage.Spec.DockerImage)},
+		VolumeMounts: []v1.VolumeMount{
+			{
+				Name:      "docker-context",
+				MountPath: DockerContextDir,
+			},
+		},
+	}
+}
+
+func (ctrl *VirtualMachineController) addRegistryInsecureFlag(pod *v1.Pod) error {
+	registryInsecure, err := ctrl.settingLister.Get(string(api.SettingNameRegistryInsecure))
+	if err != nil {
+		return err
 	}
 
-	if registryInsecureString.Spec.Value == "true" {
+	if registryInsecure.Spec.Value == "true" {
 		pod.Spec.Containers[1].Command[2] = pod.Spec.Containers[1].Command[2] + " --insecure"
 	}
+	return nil
 }
 
-func (ctrl *VirtualMachineController) addRegistrySecret(pod *v1.Pod) {
+func (ctrl *VirtualMachineController) addRegistrySecret(pod *v1.Pod) error {
 	registrySecret, err := ctrl.settingLister.Get(string(api.SettingNameRegistrySecret))
-	if registrySecret == nil {
-		if err != nil {
-			glog.Warning(err)
-		}
-		return
+	if err != nil {
+		return err
 	}
 
 	pod.Spec.Volumes = append(pod.Spec.Volumes, v1.Volume{
@@ -459,6 +506,7 @@ func (ctrl *VirtualMachineController) addRegistrySecret(pod *v1.Pod) {
 		Name:      "docker-config",
 		MountPath: "/root",
 	})
+	return nil
 }
 
 func (ctrl *VirtualMachineController) addBaseImage(pod *v1.Pod, machineImage *api.MachineImage, outputFile string) {

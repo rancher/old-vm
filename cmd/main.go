@@ -60,8 +60,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	config.QPS = 10
-	config.Burst = 20
 
 	vmClientset := versioned.NewForConfigOrDie(config)
 	vmInformerFactory := externalversions.NewSharedInformerFactory(vmClientset, 120*time.Second)

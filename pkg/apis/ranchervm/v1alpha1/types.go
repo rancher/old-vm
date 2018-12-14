@@ -213,13 +213,25 @@ type MachineImageSpec struct {
 	FromVirtualMachine string `json:"from_vm"`
 }
 
+type MachineImageState string
+
+const (
+	MachineImageSnapshot  = MachineImageState("snapshot")
+	MachineImageBackup    = MachineImageState("backup")
+	MachineImagePublish   = MachineImageState("publish")
+	MachineImageProvision = MachineImageState("provision")
+	MachineImageReady     = MachineImageState("ready")
+	MachineImageFailed    = MachineImageState("failed")
+	MachineImageUnknown   = MachineImageState("unknown")
+)
+
 type MachineImageStatus struct {
-	Snapshot  string   `json:"snapshot"`
-	BackupURL string   `json:"backup_url"`
-	BaseImage string   `json:"base_image"`
-	Published bool     `json:"published"`
-	Ready     bool     `json:"ready"`
-	Nodes     []string `json:"nodes"`
+	Snapshot  string            `json:"snapshot"`
+	BackupURL string            `json:"backup_url"`
+	BaseImage string            `json:"base_image"`
+	Published bool              `json:"published"`
+	State     MachineImageState `json:"state"`
+	Nodes     []string          `json:"nodes"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -276,9 +288,13 @@ const (
 	SettingNameLonghornInsecureSkipVerify = SettingName("longhorn-insecure-skip-verify")
 	SettingNameLonghornAccessKey          = SettingName("longhorn-access-key")
 	SettingNameLonghornSecretKey          = SettingName("longhorn-secret-key")
-	SettingNameRegistryAddress            = SettingName("registry-address")
-	SettingNameRegistrySecret             = SettingName("registry-secret")
-	SettingNameRegistryInsecure           = SettingName("registry-insecure")
+	// TODO either get rid of this setting or use it to simplify naming new registry images
+	SettingNameRegistryAddress          = SettingName("registry-address")
+	SettingNameRegistrySecret           = SettingName("registry-secret")
+	SettingNameRegistryInsecure         = SettingName("registry-insecure")
+	SettingNameImageKaniko              = SettingName("image-kaniko")
+	SettingNameImageLonghornEngine      = SettingName("image-longhorn-engine")
+	SettingNameImageMinimumAvailability = SettingName("image-minimum-replicas")
 )
 
 var (
@@ -290,6 +306,9 @@ var (
 		SettingNameRegistryAddress,
 		SettingNameRegistrySecret,
 		SettingNameRegistryInsecure,
+		SettingNameImageKaniko,
+		SettingNameImageLonghornEngine,
+		SettingNameImageMinimumAvailability,
 	}
 )
 
@@ -298,6 +317,7 @@ type SettingCategory string
 const (
 	SettingCategoryStorage  = SettingCategory("storage")
 	SettingCategoryRegistry = SettingCategory("registry")
+	SettingCategoryImage    = SettingCategory("image")
 )
 
 type SettingDefinition struct {
@@ -319,6 +339,9 @@ var (
 		SettingNameRegistryAddress:            SettingDefinitionRegistryAddress,
 		SettingNameRegistrySecret:             SettingDefinitionRegistrySecret,
 		SettingNameRegistryInsecure:           SettingDefinitionRegistryInsecure,
+		SettingNameImageKaniko:                SettingDefinitionImageKaniko,
+		SettingNameImageLonghornEngine:        SettingDefinitionImageLonghornEngine,
+		SettingNameImageMinimumAvailability:   SettingDefinitionImageMinimumAvailability,
 	}
 
 	SettingDefinitionLonghornEndpoint = SettingDefinition{
@@ -383,5 +406,36 @@ var (
 		Type:        SettingTypeBool,
 		Required:    false,
 		ReadOnly:    false,
+		Default:     "false",
+	}
+
+	SettingDefinitionImageKaniko = SettingDefinition{
+		DisplayName: "Kaniko Image",
+		Description: "Docker debug image for Kaniko executor. Used to create and publish new Docker images.",
+		Category:    SettingCategoryImage,
+		Type:        SettingTypeString,
+		Required:    true,
+		ReadOnly:    false,
+		Default:     "gcr.io/kaniko-project/executor:debug",
+	}
+
+	SettingDefinitionImageLonghornEngine = SettingDefinition{
+		DisplayName: "Longhorn Engine Image",
+		Description: "Docker image for Longhorn Engine. Used to create new machine images.",
+		Category:    SettingCategoryImage,
+		Type:        SettingTypeString,
+		Required:    true,
+		ReadOnly:    false,
+		Default:     "llparse/longhorn-engine:df56c7e-dirty",
+	}
+
+	SettingDefinitionImageMinimumAvailability = SettingDefinition{
+		DisplayName: "Machine Image Availability",
+		Description: "Image must be present on a minimum number of nodes before considered ready.",
+		Category:    SettingCategoryImage,
+		Type:        SettingTypeInt,
+		Required:    true,
+		ReadOnly:    false,
+		Default:     "3",
 	}
 )

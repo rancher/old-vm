@@ -40,16 +40,18 @@ type VirtualMachineController struct {
 	vmClient   vmclientset.Interface
 	kubeClient kubernetes.Interface
 
-	podLister       corelisters.PodLister
-	podListerSynced cache.InformerSynced
-	jobLister       batchlisters.JobLister
-	jobListerSynced cache.InformerSynced
-	svcLister       corelisters.ServiceLister
-	svcListerSynced cache.InformerSynced
-	pvLister        corelisters.PersistentVolumeLister
-	pvListerSynced  cache.InformerSynced
-	pvcLister       corelisters.PersistentVolumeClaimLister
-	pvcListerSynced cache.InformerSynced
+	podLister        corelisters.PodLister
+	podListerSynced  cache.InformerSynced
+	jobLister        batchlisters.JobLister
+	jobListerSynced  cache.InformerSynced
+	svcLister        corelisters.ServiceLister
+	svcListerSynced  cache.InformerSynced
+	pvLister         corelisters.PersistentVolumeLister
+	pvListerSynced   cache.InformerSynced
+	pvcLister        corelisters.PersistentVolumeClaimLister
+	pvcListerSynced  cache.InformerSynced
+	nodeLister       corelisters.NodeLister
+	nodeListerSynced cache.InformerSynced
 
 	vmLister                 vmlisters.VirtualMachineLister
 	vmListerSynced           cache.InformerSynced
@@ -84,6 +86,7 @@ func NewVirtualMachineController(
 	svcInformer coreinformers.ServiceInformer,
 	pvInformer coreinformers.PersistentVolumeInformer,
 	pvcInformer coreinformers.PersistentVolumeClaimInformer,
+	nodeInformer coreinformers.NodeInformer,
 	vmInformer vminformers.VirtualMachineInformer,
 	credInformer vminformers.CredentialInformer,
 	settingInformer vminformers.SettingInformer,
@@ -126,6 +129,22 @@ func NewVirtualMachineController(
 		},
 	)
 
+	nodeInformer.Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				// perform a full resync on MachineImage
+				machineImages, err := ctrl.machineImageLister.List(labels.Everything())
+				if err != nil {
+					glog.Warningf("Couldn't list machine images: %v", err)
+					return
+				}
+				for _, machineImage := range machineImages {
+					ctrl.enqueueWork(ctrl.machineImageQueue, machineImage)
+				}
+			},
+		},
+	)
+
 	vmInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { ctrl.enqueueWork(ctrl.vmQueue, obj) },
@@ -164,6 +183,9 @@ func NewVirtualMachineController(
 
 	ctrl.pvcLister = pvcInformer.Lister()
 	ctrl.pvcListerSynced = pvcInformer.Informer().HasSynced
+
+	ctrl.nodeLister = nodeInformer.Lister()
+	ctrl.nodeListerSynced = nodeInformer.Informer().HasSynced
 
 	ctrl.vmLister = vmInformer.Lister()
 	ctrl.vmListerSynced = vmInformer.Informer().HasSynced
@@ -242,7 +264,8 @@ func (ctrl *VirtualMachineController) run(stopCh <-chan struct{}) {
 		ctrl.jobListerSynced, ctrl.svcListerSynced,
 		ctrl.pvListerSynced, ctrl.pvcListerSynced,
 		ctrl.vmListerSynced, ctrl.credListerSynced,
-		ctrl.settingListerSynced, ctrl.machineImageListerSynced) {
+		ctrl.settingListerSynced, ctrl.machineImageListerSynced,
+		ctrl.nodeListerSynced) {
 		return
 	}
 
@@ -319,7 +342,7 @@ func (ctrl *VirtualMachineController) podWorker() {
 		}
 
 		pod, err := ctrl.podLister.Pods(ns).Get(name)
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			glog.Warningf("error getting pod %q from informer: %v", key, err)
 			return false
 		}
@@ -335,6 +358,13 @@ func (ctrl *VirtualMachineController) podWorker() {
 					glog.V(5).Infof("enqueued vm %q for sync", vmName)
 				case common.LabelRoleMigrate:
 				case common.LabelRoleMachineImage:
+					if strings.HasPrefix(name, "publish") {
+						name = strings.TrimPrefix(name, "publish-")
+					} else {
+						name = strings.TrimPrefix(name, "pull-")
+					}
+					name = strings.TrimSuffix(name, "-"+pod.Spec.NodeName)
+
 					ctrl.machineImageQueue.Add(name)
 					glog.V(5).Infof("enqueued machineImage %q for sync", name)
 				}

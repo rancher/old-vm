@@ -25,10 +25,26 @@ func (l MachineImageList) Less(i, j int) bool { return l.Items[i].Name < l.Items
 func (l MachineImageList) Swap(i, j int)      { l.Items[i], l.Items[j] = l.Items[j], l.Items[i] }
 
 func (s *server) MachineImageList(w http.ResponseWriter, r *http.Request) {
-	machineImages, err := s.machineImageLister.List(labels.Everything())
+	list, err := s.machineImageList()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
+	}
+
+	resp, err := json.Marshal(list)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(resp)
+}
+
+func (s *server) machineImageList() (interface{}, error) {
+	machineImages, err := s.machineImageLister.List(labels.Everything())
+	if err != nil {
+		return nil, err
 	}
 
 	list := MachineImageList{}
@@ -39,14 +55,7 @@ func (s *server) MachineImageList(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Sort(list)
 
-	resp, err := json.Marshal(list)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(resp)
+	return list, nil
 }
 
 type MachineImageCreate struct {

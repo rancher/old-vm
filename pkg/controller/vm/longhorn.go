@@ -161,7 +161,7 @@ func (c *LonghornClient) GetBackup(volumeName, snapshotName string) (*BackupVolu
 		return nil, err
 	}
 
-	if len(list.Items) == 0 {
+	if list == nil || len(list.Items) == 0 {
 		return nil, nil
 	}
 

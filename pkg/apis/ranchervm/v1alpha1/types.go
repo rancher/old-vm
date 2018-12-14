@@ -214,11 +214,12 @@ type MachineImageSpec struct {
 }
 
 type MachineImageStatus struct {
-	Snapshot  string `json:"snapshot"`
-	BackupURL string `json:"backup_url"`
-	BaseImage string `json:"base_image"`
-	Published bool   `json:"published"`
-	Ready     bool   `json:"ready"`
+	Snapshot  string   `json:"snapshot"`
+	BackupURL string   `json:"backup_url"`
+	BaseImage string   `json:"base_image"`
+	Published bool     `json:"published"`
+	Ready     bool     `json:"ready"`
+	Nodes     []string `json:"nodes"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

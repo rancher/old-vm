@@ -16,6 +16,13 @@ import (
 	vmlisters "github.com/rancher/vm/pkg/client/listers/ranchervm/v1alpha1"
 )
 
+const (
+	VirtualMachineResource = "virtualmachine"
+	NodeResource           = "node"
+	CredentialResource     = "credential"
+	MachineImageResource   = "machineimage"
+)
+
 type SimpleResourceEventHandler struct{ ChangeFunc func() }
 
 func (s SimpleResourceEventHandler) OnAdd(obj interface{})               { s.ChangeFunc() }
@@ -92,10 +99,10 @@ func NewServer(
 		watchers:      []*Watcher{},
 	}
 
-	vmInformer.Informer().AddEventHandler(s.notifyWatchersHandler("virtualmachine"))
-	nodeInformer.Informer().AddEventHandler(s.notifyWatchersHandler("node"))
-	credInformer.Informer().AddEventHandler(s.notifyWatchersHandler("credential"))
-	machineImageInformer.Informer().AddEventHandler(s.notifyWatchersHandler("machineimage"))
+	vmInformer.Informer().AddEventHandler(s.notifyWatchersHandler(VirtualMachineResource))
+	nodeInformer.Informer().AddEventHandler(s.notifyWatchersHandler(NodeResource))
+	credInformer.Informer().AddEventHandler(s.notifyWatchersHandler(CredentialResource))
+	machineImageInformer.Informer().AddEventHandler(s.notifyWatchersHandler(MachineImageResource))
 
 	return s
 }
@@ -153,6 +160,11 @@ func (s *server) notifyWatchersFunc(resource string) func() {
 func (s *server) newRouter() *mux.Router {
 	r := mux.NewRouter().StrictSlash(true)
 
+	instanceWatcher := s.NewWatcher(VirtualMachineResource)
+	defer instanceWatcher.Close()
+	instanceListStream := NewStreamHandlerFunc(instanceWatcher, s.instanceList)
+	r.Path("/v1/ws/instances").Handler(http.HandlerFunc(instanceListStream))
+	r.Path("/v1/ws/{period}/instances").Handler(http.HandlerFunc(instanceListStream))
 	r.Methods("GET").Path("/v1/instances").Handler(http.HandlerFunc(s.InstanceList))
 	r.Methods("POST").Path("/v1/instances").Handler(http.HandlerFunc(s.InstanceCreate))
 	r.Methods("PUT").Path("/v1/instances").Handler(http.HandlerFunc(s.InstanceUpdate))
@@ -162,31 +174,28 @@ func (s *server) newRouter() *mux.Router {
 	r.Methods("POST").Path("/v1/instances/{name}/{action}").Handler(http.HandlerFunc(s.InstanceAction))
 	r.Methods("POST").Path("/v1/instances/{action}").Handler(http.HandlerFunc(s.InstanceActionMulti))
 
+	nodeWatcher := s.NewWatcher(NodeResource)
+	defer nodeWatcher.Close()
+	nodeListStream := NewStreamHandlerFunc(nodeWatcher, s.nodeList)
+	r.Path("/v1/ws/host").Handler(http.HandlerFunc(nodeListStream))
+	r.Path("/v1/ws/{period}/host").Handler(http.HandlerFunc(nodeListStream))
 	r.Methods("GET").Path("/v1/host").Handler(http.HandlerFunc(s.NodeList))
 
+	credentialWatcher := s.NewWatcher(CredentialResource)
+	defer credentialWatcher.Close()
+	credentialListStream := NewStreamHandlerFunc(credentialWatcher, s.credentialList)
+	r.Path("/v1/ws/credential").Handler(http.HandlerFunc(credentialListStream))
+	r.Path("/v1/ws/{period}/credential").Handler(http.HandlerFunc(credentialListStream))
 	r.Methods("GET").Path("/v1/credential").Handler(http.HandlerFunc(s.CredentialList))
 	r.Methods("POST").Path("/v1/credential").Handler(http.HandlerFunc(s.CredentialCreate))
 	r.Methods("GET").Path("/v1/credential/{name}").Handler(http.HandlerFunc(s.CredentialGet))
 	r.Methods("DELETE").Path("/v1/credential/{name}").Handler(http.HandlerFunc(s.CredentialDelete))
 
-	instanceWatcher := s.NewWatcher("virtualmachine")
-	defer instanceWatcher.Close()
-	instanceListStream := NewStreamHandlerFunc(instanceWatcher, s.instanceList)
-	r.Path("/v1/ws/instances").Handler(http.HandlerFunc(instanceListStream))
-	r.Path("/v1/ws/{period}/instances").Handler(http.HandlerFunc(instanceListStream))
-
-	nodeWatcher := s.NewWatcher("node")
-	defer nodeWatcher.Close()
-	nodeListStream := NewStreamHandlerFunc(nodeWatcher, s.nodeList)
-	r.Path("/v1/ws/host").Handler(http.HandlerFunc(nodeListStream))
-	r.Path("/v1/ws/{period}/host").Handler(http.HandlerFunc(nodeListStream))
-
-	credentialWatcher := s.NewWatcher("credential")
-	defer credentialWatcher.Close()
-	credentialListStream := NewStreamHandlerFunc(credentialWatcher, s.credentialList)
-	r.Path("/v1/ws/credential").Handler(http.HandlerFunc(credentialListStream))
-	r.Path("/v1/ws/{period}/credential").Handler(http.HandlerFunc(credentialListStream))
-
+	machineImageWatcher := s.NewWatcher(MachineImageResource)
+	defer machineImageWatcher.Close()
+	machineImageListStream := NewStreamHandlerFunc(machineImageWatcher, s.machineImageList)
+	r.Path("/v1/ws/machineimage").Handler(http.HandlerFunc(machineImageListStream))
+	r.Path("/v1/ws/{period}/machineimage").Handler(http.HandlerFunc(machineImageListStream))
 	r.Methods("GET").Path("/v1/machineimage").Handler(http.HandlerFunc(s.MachineImageList))
 	r.Methods("POST").Path("/v1/machineimage").Handler(http.HandlerFunc(s.MachineImageCreate))
 	r.Methods("GET").Path("/v1/machineimage/{name}").Handler(http.HandlerFunc(s.MachineImageGet))

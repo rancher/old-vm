@@ -237,25 +237,7 @@ func (ctrl *VirtualMachineController) provisionNodes(machineImage *api.MachineIm
 			}
 		}
 	}
-
-	var newNodeNames []string
-	for _, nodeName := range nodesReady {
-		exists := false
-		for _, existing := range machineImage.Status.Nodes {
-			if existing == nodeName {
-				exists = true
-				break
-			}
-		}
-		if !exists {
-			newNodeNames = append(newNodeNames, nodeName)
-		}
-	}
-	if len(newNodeNames) > 0 {
-		return ctrl.addNodesReady(machineImage, newNodeNames...)
-	}
-
-	nodeReadyCount := len(nodesReady)
+	sort.Strings(nodesReady)
 
 	minimumAvailability, err := ctrl.settingLister.Get(string(api.SettingNameImageMinimumAvailability))
 	if err != nil {
@@ -266,19 +248,11 @@ func (ctrl *VirtualMachineController) provisionNodes(machineImage *api.MachineIm
 		return err
 	}
 
-	if nodeReadyCount >= minNodeReadyCount || nodeReadyCount == len(nodes) {
-		if machineImage.Status.State != api.MachineImageReady {
-			return ctrl.setMachineImageState(machineImage, api.MachineImageReady)
-		}
-	} else {
-		if machineImage.Status.State != api.MachineImageProvision {
-			return ctrl.setMachineImageState(machineImage, api.MachineImageProvision)
-		}
-		// FIXME shouldn't be an error, just a healthy loop termination (and V(5) log event)
-		return fmt.Errorf("(%d/%d) nodes containing image (%s), need at least %d",
-			nodeReadyCount, len(nodes), machineImage.Spec.DockerImage, minNodeReadyCount)
+	currentState := api.MachineImageProvision
+	if len(nodesReady) >= minNodeReadyCount || len(nodesReady) == len(nodes) {
+		currentState = api.MachineImageReady
 	}
-	return nil
+	return ctrl.updateNodesReady(machineImage, currentState, nodesReady)
 }
 
 func getPullImagePodName(machineImage *api.MachineImage, node *v1.Node) string {
@@ -343,9 +317,10 @@ func (ctrl *VirtualMachineController) setMachineImageState(machineImage *api.Mac
 	return
 }
 
-func (ctrl *VirtualMachineController) addNodesReady(machineImage *api.MachineImage, nodeNames ...string) (err error) {
+func (ctrl *VirtualMachineController) updateNodesReady(machineImage *api.MachineImage, state api.MachineImageState, nodesReady []string) (err error) {
 	mutable := machineImage.DeepCopy()
-	mutable.Status.Nodes = append(mutable.Status.Nodes, nodeNames...)
+	mutable.Status.State = state
+	mutable.Status.Nodes = nodesReady
 	sort.Strings(mutable.Status.Nodes)
 	mutable, err = ctrl.vmClient.VirtualmachineV1alpha1().MachineImages().Update(mutable)
 	return

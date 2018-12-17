@@ -28,7 +28,7 @@ func (ctrl *VirtualMachineController) updateNovnc(vm *vmapi.VirtualMachine, podN
 		}
 		vm2 := vm.DeepCopy()
 		vm2.Status.VncEndpoint = ""
-		if err = ctrl.updateVMStatus(vm, vm2); err != nil {
+		if err = ctrl.updateMachineStatus(vm, vm2); err != nil {
 			glog.Warningf("error removing vnc endpoint from vm %s/%s: %v", common.NamespaceVM, vm.Name, err)
 		}
 	}
@@ -75,7 +75,7 @@ func (ctrl *VirtualMachineController) updateNovncService(vm *vmapi.VirtualMachin
 
 	vm2 := vm.DeepCopy()
 	vm2.Status.VncEndpoint = fmt.Sprintf("%s:%d", vm.Status.NodeIP, svc.Spec.Ports[0].NodePort)
-	return ctrl.updateVMStatus(vm, vm2)
+	return ctrl.updateMachineStatus(vm, vm2)
 }
 
 func (ctrl *VirtualMachineController) deleteConsolePod(vm *vmapi.VirtualMachine) error {

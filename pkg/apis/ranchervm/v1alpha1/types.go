@@ -411,7 +411,7 @@ var (
 
 	SettingDefinitionImageKaniko = SettingDefinition{
 		DisplayName: "Kaniko Image",
-		Description: "Docker debug image for Kaniko executor. Used to create and publish new Docker images.",
+		Description: "Docker debug image for Kaniko executor. Used to publish new Docker images.",
 		Category:    SettingCategoryImage,
 		Type:        SettingTypeString,
 		Required:    true,

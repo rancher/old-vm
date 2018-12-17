@@ -1,11 +1,11 @@
 package vm
 
 import (
-	"strings"
-
 	"github.com/golang/glog"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
+	api "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
 )
 
 func (ctrl *VirtualMachineController) settingWorker() {
@@ -26,37 +26,35 @@ func (ctrl *VirtualMachineController) settingWorker() {
 	}
 	for {
 		if quit := workFunc(); quit {
-			glog.Infof("setting worker queue shutting down")
+			glog.Infof("settingWorker: shutting down")
 			return
 		}
 	}
 }
 
-func (ctrl *VirtualMachineController) updateLonghornClient() error {
-	endpointSetting, err := ctrl.settingLister.Get(string(vmapi.SettingNameLonghornEndpoint))
-	if err != nil {
-		return err
+func (ctrl *VirtualMachineController) initializeSettings() error {
+	for name, definition := range api.SettingDefinitions {
+		setting, err := ctrl.settingLister.Get(string(name))
+		if apierrors.IsNotFound(err) || setting == nil {
+			setting := &api.Setting{
+				// I shouldn't have to set the type meta, what's wrong with the client?
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "vm.rancher.io/v1alpha1",
+					Kind:       "Setting",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: string(name),
+				},
+				Spec: api.SettingSpec{
+					Value: definition.Default,
+				},
+			}
+			if _, err := ctrl.vmClient.VirtualmachineV1alpha1().Settings().Create(setting); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
 	}
-	endpoint := strings.TrimSuffix(endpointSetting.Spec.Value, "/")
-
-	accessKeySetting, err := ctrl.settingLister.Get(string(vmapi.SettingNameLonghornAccessKey))
-	if err != nil {
-		return err
-	}
-	accessKey := accessKeySetting.Spec.Value
-
-	secretKeySetting, err := ctrl.settingLister.Get(string(vmapi.SettingNameLonghornSecretKey))
-	if err != nil {
-		return err
-	}
-	secretKey := secretKeySetting.Spec.Value
-
-	insecureSkipVerifySetting, err := ctrl.settingLister.Get(string(vmapi.SettingNameLonghornInsecureSkipVerify))
-	if err != nil {
-		return err
-	}
-	insecureSkipVerify := insecureSkipVerifySetting.Spec.Value == "true"
-
-	ctrl.lhClient = NewLonghornClient(endpoint, accessKey, secretKey, insecureSkipVerify)
 	return nil
 }

@@ -53,21 +53,21 @@ func CreateConsoleProbe() *corev1.Probe {
 	}
 }
 
-func (ctrl *VirtualMachineController) createLonghornMachinePod(vm *v1alpha1.VirtualMachine, migrate bool) *corev1.Pod {
-	cpu := strconv.Itoa(int(vm.Spec.Cpus))
-	mem := strconv.Itoa(int(vm.Spec.MemoryMB))
-	kvmextraargs := string(vm.Spec.KvmArgs)
+func (ctrl *VirtualMachineController) createLonghornMachinePod(machine *v1alpha1.VirtualMachine, migrate bool) *corev1.Pod {
+	cpu := strconv.Itoa(int(machine.Spec.Cpus))
+	mem := strconv.Itoa(int(machine.Spec.MemoryMB))
+	kvmextraargs := string(machine.Spec.KvmArgs)
 
 	var imageVmTools string
-	if vm.Spec.ImageVMTools == "" {
+	if machine.Spec.ImageVMTools == "" {
 		imageVmTools = *common.ImageVMTools
 	} else {
-		imageVmTools = vm.Spec.ImageVMTools
+		imageVmTools = machine.Spec.ImageVMTools
 	}
 	glog.Infof("imageVmTools: %v", imageVmTools)
 
 	consoleProbe := CreateConsoleProbe()
-	podName := newPodName(vm.Name)
+	podName := newPodName(machine.Name)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			// TODO: use GenerateName, find alternative to selector on unique_name
@@ -75,21 +75,21 @@ func (ctrl *VirtualMachineController) createLonghornMachinePod(vm *v1alpha1.Virt
 			Labels: map[string]string{
 				"app":         common.LabelApp,
 				"role":        common.LabelRoleVM,
-				"name":        vm.Name,
+				"name":        machine.Name,
 				"unique_name": podName,
 			},
 			Annotations: map[string]string{
 				"cpus":      cpu,
 				"memory_mb": mem,
-				"id":        vm.Status.ID,
-				"mac":       vm.Status.MAC,
+				"id":        machine.Status.ID,
+				"mac":       machine.Status.MAC,
 			},
 		},
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
-				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, vm.Name)),
+				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, machine.Name)),
 				common.MakeVolHostPath("dev-kvm", "/dev/kvm"),
-				common.MakePvcVol("longhorn", vm.Name),
+				common.MakePvcVol("longhorn", machine.Name),
 			},
 			Containers: []corev1.Container{
 				corev1.Container{
@@ -104,10 +104,10 @@ func (ctrl *VirtualMachineController) createLonghornMachinePod(vm *v1alpha1.Virt
 						common.MakeEnvVar("KVM_EXTRA_ARGS", kvmextraargs, nil),
 						common.MakeEnvVar("MEMORY_MB", mem, nil),
 						common.MakeEnvVar("CPUS", cpu, nil),
-						common.MakeEnvVar("MAC", vm.Status.MAC, nil),
-						common.MakeEnvVar("INSTANCE_ID", vm.Status.ID, nil),
+						common.MakeEnvVar("MAC", machine.Status.MAC, nil),
+						common.MakeEnvVar("INSTANCE_ID", machine.Status.ID, nil),
 						common.MakeEnvVar("MIGRATE", strconv.FormatBool(migrate), nil),
-						common.MakeEnvVar("MY_VM_NAME", vm.Name, nil),
+						common.MakeEnvVar("MY_VM_NAME", machine.Name, nil),
 					},
 					VolumeMounts: []corev1.VolumeMount{
 						common.MakeVolumeMount("dev-kvm", "/dev/kvm", "", false),
@@ -127,17 +127,17 @@ func (ctrl *VirtualMachineController) createLonghornMachinePod(vm *v1alpha1.Virt
 	}
 
 	// Disallow scheduling a migration pod on the same node
-	ctrl.addMachineAntiAffinity(pod, vm)
+	ctrl.addMachineAntiAffinity(pod, machine)
 
-	ctrl.addResourceRequirements(pod, vm)
+	ctrl.addResourceRequirements(pod, machine)
 
-	ctrl.addPublicKeys(pod, vm)
+	ctrl.addPublicKeys(pod, machine)
 
 	if migrate {
 		addMigratePort(pod)
 	}
 
-	addNodeAffinity(pod, vm)
+	addNodeAffinity(pod, machine)
 
 	return pod
 }
@@ -156,19 +156,19 @@ func (ctrl *VirtualMachineController) getImagePullSecrets() (refs []corev1.Local
 
 var privileged = true
 
-func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {
+func (ctrl *VirtualMachineController) makeVMPod(machine *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {
 	var hugePagesVolume corev1.Volume
-	var vmImageVolume corev1.Volume
-	var vmVolumesVolume corev1.Volume
+	var machineImageVolume corev1.Volume
+	var machineVolumesVolume corev1.Volume
 
-	cpu := strconv.Itoa(int(vm.Spec.Cpus))
-	mem := strconv.Itoa(int(vm.Spec.MemoryMB))
-	image := string(vm.Spec.MachineImage)
-	kvmextraargs := string(vm.Spec.KvmArgs)
+	cpu := strconv.Itoa(int(machine.Spec.Cpus))
+	mem := strconv.Itoa(int(machine.Spec.MemoryMB))
+	image := string(machine.Spec.MachineImage)
+	kvmextraargs := string(machine.Spec.KvmArgs)
 
 	consoleProbe := CreateConsoleProbe()
 
-	vmContainer := corev1.Container{
+	machineContainer := corev1.Container{
 		Name:            common.LabelRoleVM,
 		Image:           image,
 		ImagePullPolicy: corev1.PullAlways,
@@ -180,10 +180,10 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 			common.MakeEnvVar("KVM_EXTRA_ARGS", kvmextraargs, nil),
 			common.MakeEnvVar("MEMORY_MB", mem, nil),
 			common.MakeEnvVar("CPUS", cpu, nil),
-			common.MakeEnvVar("MAC", vm.Status.MAC, nil),
-			common.MakeEnvVar("INSTANCE_ID", vm.Status.ID, nil),
+			common.MakeEnvVar("MAC", machine.Status.MAC, nil),
+			common.MakeEnvVar("INSTANCE_ID", machine.Status.ID, nil),
 			common.MakeEnvVar("MIGRATE", strconv.FormatBool(migrate), nil),
-			common.MakeEnvVar("MY_VM_NAME", vm.Name, nil),
+			common.MakeEnvVar("MY_VM_NAME", machine.Name, nil),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			common.MakeVolumeMount("vm-image", "/image", "", false),
@@ -209,39 +209,39 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 		},
 	}
 
-	if vm.Spec.UseHugePages {
+	if machine.Spec.UseHugePages {
 		hugePagesVolume = common.MakeVolEmptyDirHugePages("hugepages")
 	} else {
 		hugePagesVolume = common.MakeVolEmptyDir("hugepages")
 	}
 
-	if vm.Spec.VmImagePvcName == "" {
-		vmImageVolume = common.MakeHostStateVol(vm.Name, "vm-image")
+	if machine.Spec.VmImagePvcName == "" {
+		machineImageVolume = common.MakeHostStateVol(machine.Name, "vm-image")
 	} else {
-		vmImageVolume = common.MakePvcVol("vm-image", vm.Spec.VmImagePvcName)
+		machineImageVolume = common.MakePvcVol("vm-image", machine.Spec.VmImagePvcName)
 	}
 
-	if vm.Spec.VmVolumesPvcName == "" {
-		vmVolumesVolume = common.MakeHostStateVol(vm.Name, "vm-volumes")
+	if machine.Spec.VmVolumesPvcName == "" {
+		machineVolumesVolume = common.MakeHostStateVol(machine.Name, "vm-volumes")
 	} else {
-		vmVolumesVolume = common.MakePvcVol("vm-volumes", vm.Spec.VmVolumesPvcName)
+		machineVolumesVolume = common.MakePvcVol("vm-volumes", machine.Spec.VmVolumesPvcName)
 	}
 
 	var imageVmTools string
-	if vm.Spec.ImageVMTools == "" {
+	if machine.Spec.ImageVMTools == "" {
 		imageVmTools = *common.ImageVMTools
 	} else {
-		imageVmTools = vm.Spec.ImageVMTools
+		imageVmTools = machine.Spec.ImageVMTools
 	}
 
-	uniquePodName := newPodName(vm.Name)
-	vmPod := &corev1.Pod{
+	uniquePodName := newPodName(machine.Name)
+	machinePod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			// TODO: use GenerateName, find alternative to selector on unique_name
 			Name: uniquePodName,
 			Labels: map[string]string{
 				"app":         common.LabelApp,
-				"name":        vm.Name,
+				"name":        machine.Name,
 				"unique_name": uniquePodName,
 				"role":        common.LabelRoleVM,
 			},
@@ -249,16 +249,16 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 				"cpus":      cpu,
 				"memory_mb": mem,
 				"image":     image,
-				"id":        vm.Status.ID,
-				"mac":       vm.Status.MAC,
+				"id":        machine.Status.ID,
+				"mac":       machine.Status.MAC,
 			},
 		},
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
-				common.MakeHostStateVol(vm.Name, "vm-fs"),
-				vmImageVolume,
-				vmVolumesVolume,
-				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, vm.Name)),
+				common.MakeHostStateVol(machine.Name, "vm-fs"),
+				machineImageVolume,
+				machineVolumesVolume,
+				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, machine.Name)),
 				common.MakeVolHostPath("dev-kvm", "/dev/kvm"),
 				hugePagesVolume,
 			},
@@ -273,7 +273,7 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 				},
 			},
 			Containers: []corev1.Container{
-				vmContainer,
+				machineContainer,
 			},
 			HostNetwork:      true,
 			ImagePullSecrets: ctrl.getImagePullSecrets(),
@@ -281,22 +281,22 @@ func (ctrl *VirtualMachineController) makeVMPod(vm *v1alpha1.VirtualMachine, ifa
 	}
 
 	// Disallow scheduling a migration pod on the same node
-	ctrl.addMachineAntiAffinity(vmPod, vm)
+	ctrl.addMachineAntiAffinity(machinePod, machine)
 
-	ctrl.addResourceRequirements(vmPod, vm)
+	ctrl.addResourceRequirements(machinePod, machine)
 
-	ctrl.addPublicKeys(vmPod, vm)
+	ctrl.addPublicKeys(machinePod, machine)
 
 	if migrate {
-		addMigratePort(vmPod)
+		addMigratePort(machinePod)
 	}
 
-	addNodeAffinity(vmPod, vm)
+	addNodeAffinity(machinePod, machine)
 
-	return vmPod
+	return machinePod
 }
 
-func (ctrl *VirtualMachineController) addMachineAntiAffinity(pod *corev1.Pod, vm *v1alpha1.VirtualMachine) {
+func (ctrl *VirtualMachineController) addMachineAntiAffinity(pod *corev1.Pod, machine *v1alpha1.VirtualMachine) {
 	pod.Spec.Affinity = &corev1.Affinity{
 		PodAntiAffinity: &corev1.PodAntiAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
@@ -305,7 +305,7 @@ func (ctrl *VirtualMachineController) addMachineAntiAffinity(pod *corev1.Pod, vm
 						MatchLabels: map[string]string{
 							"app":  common.LabelApp,
 							"role": common.LabelRoleVM,
-							"name": vm.Name,
+							"name": machine.Name,
 						},
 					},
 					TopologyKey: common.LabelNodeHostname,
@@ -315,30 +315,30 @@ func (ctrl *VirtualMachineController) addMachineAntiAffinity(pod *corev1.Pod, vm
 	}
 }
 
-func (ctrl *VirtualMachineController) addResourceRequirements(pod *corev1.Pod, vm *v1alpha1.VirtualMachine) {
+func (ctrl *VirtualMachineController) addResourceRequirements(pod *corev1.Pod, machine *v1alpha1.VirtualMachine) {
 	if ctrl.noResourceLimits {
 		return
 	}
 	pod.Spec.Containers[0].Resources = corev1.ResourceRequirements{
 		Limits: map[corev1.ResourceName]resource.Quantity{
 			// CPU, in cores. (500m = .5 cores)
-			corev1.ResourceCPU: *resource.NewQuantity(int64(vm.Spec.Cpus), resource.BinarySI),
+			corev1.ResourceCPU: *resource.NewQuantity(int64(machine.Spec.Cpus), resource.BinarySI),
 			// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
-			corev1.ResourceMemory: *resource.NewQuantity(int64(vm.Spec.MemoryMB)*1024*1024, resource.BinarySI),
+			corev1.ResourceMemory: *resource.NewQuantity(int64(machine.Spec.MemoryMB)*1024*1024, resource.BinarySI),
 			// Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
 			// corev1.ResourceStorage: *resource.NewQuantity(8*1024*1024*1024, resource.BinarySI),
 		},
 	}
-	if vm.Spec.UseHugePages {
+	if machine.Spec.UseHugePages {
 		// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 		pod.Spec.Containers[0].Resources.Limits[corev1.ResourceHugePagesPrefix+"2Mi"] =
-			*resource.NewQuantity(int64(vm.Spec.MemoryMB)*1024*1024, resource.BinarySI)
+			*resource.NewQuantity(int64(machine.Spec.MemoryMB)*1024*1024, resource.BinarySI)
 	}
 }
 
-func (ctrl *VirtualMachineController) addPublicKeys(pod *corev1.Pod, vm *v1alpha1.VirtualMachine) {
+func (ctrl *VirtualMachineController) addPublicKeys(pod *corev1.Pod, machine *v1alpha1.VirtualMachine) {
 	var publicKeys []*v1alpha1.Credential
-	for _, publicKeyName := range vm.Spec.PublicKeys {
+	for _, publicKeyName := range machine.Spec.PublicKeys {
 		publicKey, err := ctrl.credLister.Get(publicKeyName)
 		if err != nil {
 			glog.Warningf("Public key (%s) error: %v", publicKeyName, err)
@@ -365,11 +365,11 @@ func addMigratePort(pod *corev1.Pod) {
 	pod.ObjectMeta.Annotations["migrate_port"] = migratePort
 }
 
-// addNodeAffinity adds a hard affinity constraint to schedule a vm pod onto a
+// addNodeAffinity adds a hard affinity constraint to schedule a machine pod onto a
 // specific node, if specified. Providing a node name that doesn't exist is
 // allowed; pod scheduling will hang until a node with specified name is added.
-func addNodeAffinity(pod *corev1.Pod, vm *v1alpha1.VirtualMachine) {
-	if vm.Spec.NodeName == "" {
+func addNodeAffinity(pod *corev1.Pod, machine *v1alpha1.VirtualMachine) {
+	if machine.Spec.NodeName == "" {
 		return
 	}
 	pod.Spec.Affinity.NodeAffinity = &corev1.NodeAffinity{
@@ -380,7 +380,7 @@ func addNodeAffinity(pod *corev1.Pod, vm *v1alpha1.VirtualMachine) {
 						corev1.NodeSelectorRequirement{
 							Key:      common.LabelNodeHostname,
 							Operator: corev1.NodeSelectorOpIn,
-							Values:   []string{vm.Spec.NodeName},
+							Values:   []string{machine.Spec.NodeName},
 						},
 					},
 				},
@@ -396,10 +396,10 @@ func newPodName(name string) string {
 	}, common.NameDelimiter)
 }
 
-func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {
+func makeNovncService(machine *v1alpha1.VirtualMachine) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: vm.Name + "-novnc",
+			Name: machine.Name + "-novnc",
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -410,7 +410,7 @@ func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {
 			},
 			Selector: map[string]string{
 				"app":  common.LabelApp,
-				"name": vm.Name,
+				"name": machine.Name,
 				"role": common.LabelRoleNoVNC,
 			},
 			Type: corev1.ServiceTypeNodePort,
@@ -420,19 +420,19 @@ func makeNovncService(vm *v1alpha1.VirtualMachine) *corev1.Service {
 
 var noGracePeriod = int64(0)
 
-func (ctrl *VirtualMachineController) makeNovncPod(vm *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
+func (ctrl *VirtualMachineController) makeNovncPod(machine *v1alpha1.VirtualMachine, podName string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: vm.Name + "-novnc",
+			Name: machine.Name + "-novnc",
 			Labels: map[string]string{
 				"app":  common.LabelApp,
-				"name": vm.Name,
+				"name": machine.Name,
 				"role": common.LabelRoleNoVNC,
 			},
 		},
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
-				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, vm.Name)),
+				common.MakeVolHostPath("vm-socket", fmt.Sprintf("%s/%s", common.HostStateBaseDir, machine.Name)),
 				common.MakeVolFieldPath("podinfo", "labels", "metadata.labels"),
 			},
 			Containers: []corev1.Container{
@@ -458,7 +458,7 @@ func (ctrl *VirtualMachineController) makeNovncPod(vm *v1alpha1.VirtualMachine, 
 							LabelSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
 									"app":         common.LabelApp,
-									"name":        vm.Name,
+									"name":        machine.Name,
 									"unique_name": podName,
 									"role":        common.LabelRoleVM,
 								},

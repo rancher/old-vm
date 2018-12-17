@@ -64,7 +64,7 @@ func (ctrl *VirtualMachineController) processMachineImage(name string) error {
 	}
 
 	if machineImage.Spec.FromVirtualMachine != "" {
-		machine, err := ctrl.vmLister.Get(machineImage.Spec.FromVirtualMachine)
+		machine, err := ctrl.machineLister.Get(machineImage.Spec.FromVirtualMachine)
 		if err != nil {
 			return err
 		}
@@ -285,6 +285,7 @@ func getPullImagePod(machineImage *api.MachineImage, node *v1.Node) *v1.Pod {
 }
 
 func nodeContainsImage(node *v1.Node, machineImage *api.MachineImage) bool {
+	// node.Status.Images doesn't always update
 	for _, image := range node.Status.Images {
 		for _, name := range image.Names {
 			if name == machineImage.Spec.DockerImage {

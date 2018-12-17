@@ -15,12 +15,12 @@ import (
 	"github.com/rancher/vm/pkg/qemu"
 )
 
-func (ctrl *VirtualMachineController) migrateVM(vm *vmapi.VirtualMachine) error {
+func (ctrl *VirtualMachineController) migrateMachine(vm *vmapi.VirtualMachine) error {
 	switch vm.Status.State {
 	case vmapi.StateRunning:
 		vm2 := vm.DeepCopy()
 		vm2.Status.State = vmapi.StateMigrating
-		if err := ctrl.updateVMStatus(vm, vm2); err != nil {
+		if err := ctrl.updateMachineStatus(vm, vm2); err != nil {
 			return err
 		}
 		vm = vm2
@@ -68,7 +68,7 @@ func (ctrl *VirtualMachineController) migrateRollback(vm *vmapi.VirtualMachine, 
 
 	vm2 := vm.DeepCopy()
 	vm2.Status.State = vmapi.StateRunning
-	return ctrl.updateVMStatus(vm, vm2)
+	return ctrl.updateMachineStatus(vm, vm2)
 }
 
 var fg = metav1.DeletePropagationForeground
@@ -88,7 +88,7 @@ func getJobName(vm *vmapi.VirtualMachine) string {
 func (ctrl *VirtualMachineController) migrationCleanup(vm *vmapi.VirtualMachine, oldPod *corev1.Pod, newPod *corev1.Pod) error {
 	vm2 := vm.DeepCopy()
 	vm2.Spec.Action = vmapi.ActionStart
-	if err := ctrl.updateVMStatusWithPod(vm, vm2, newPod); err != nil {
+	if err := ctrl.updateMachineStatusWithPod(vm, vm2, newPod); err != nil {
 		return err
 	}
 

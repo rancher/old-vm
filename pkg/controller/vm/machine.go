@@ -119,7 +119,7 @@ func (ctrl *VirtualMachineController) prepareMachine(machine *api.VirtualMachine
 }
 
 func (ctrl *VirtualMachineController) start(machine *api.VirtualMachine) error {
-	machine, pod, err := ctrl.updateMachinePod(machine)
+	_, pod, err := ctrl.updateMachinePod(machine)
 	if err != nil {
 		glog.Warningf("error updating machine pod %s/%s: %v", common.NamespaceVM, machine.Name, err)
 		return err
@@ -197,6 +197,20 @@ func (ctrl *VirtualMachineController) stop(machine *api.VirtualMachine) (err err
 }
 
 func (ctrl *VirtualMachineController) updateMachinePod(machine *api.VirtualMachine) (machine2 *api.VirtualMachine, pod *corev1.Pod, err error) {
+	image, err := ctrl.machineImageLister.Get(machine.Spec.MachineImage)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if image.Status.State != api.MachineImageReady {
+		return nil, nil, fmt.Errorf("Machine image state: %s", image.Status.State)
+	}
+
+	publicKeys, err := ctrl.getPublicKeys(machine)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	machine2 = machine
 	pods, err := ctrl.podLister.Pods(common.NamespaceVM).List(labels.Set{
 		"app":  common.LabelApp,
@@ -213,9 +227,9 @@ func (ctrl *VirtualMachineController) updateMachinePod(machine *api.VirtualMachi
 	switch len(alivePods) {
 	case 0:
 		if machine.Spec.Volume.Longhorn != nil {
-			pod = ctrl.createLonghornMachinePod(machine, false)
+			pod = ctrl.createLonghornMachinePod(machine, publicKeys, false)
 		} else {
-			pod = ctrl.makeVMPod(machine, ctrl.bridgeIface, ctrl.noResourceLimits, false)
+			pod = ctrl.createMachinePod(machine, publicKeys, image, false)
 		}
 		pod, err = ctrl.kubeClient.CoreV1().Pods(common.NamespaceVM).Create(pod)
 		if err != nil {

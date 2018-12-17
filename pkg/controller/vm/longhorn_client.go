@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 
 	api "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
 )
@@ -210,12 +211,13 @@ type Controller struct {
 	NodeID   string `json:"hostId"`
 }
 
-func (c *LonghornClient) CreateVolume(machine *api.VirtualMachine) error {
+func (c *LonghornClient) CreateVolume(machine *api.VirtualMachine, image *api.MachineImage) error {
+
 	vol := &LonghornVolume{
 		Name:                machine.Name,
-		Size:                machine.Spec.Volume.Longhorn.Size,
+		BaseImage:           image.Spec.DockerImage,
+		Size:                strconv.Itoa(image.Spec.SizeGiB) + "Gi",
 		Frontend:            machine.Spec.Volume.Longhorn.Frontend,
-		BaseImage:           machine.Spec.Volume.Longhorn.BaseImage,
 		NumberOfReplicas:    machine.Spec.Volume.Longhorn.NumberOfReplicas,
 		StaleReplicaTimeout: machine.Spec.Volume.Longhorn.StaleReplicaTimeout,
 	}

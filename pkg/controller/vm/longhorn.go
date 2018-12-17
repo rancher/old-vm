@@ -1,6 +1,8 @@
 package vm
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -42,10 +44,19 @@ func (ctrl *VirtualMachineController) updateLonghornClient() error {
 }
 
 func (ctrl *VirtualMachineController) createLonghornVolume(machine *api.VirtualMachine) error {
+	image, err := ctrl.machineImageLister.Get(machine.Spec.MachineImage)
+	if err != nil {
+		return err
+	}
+
+	if image.Status.State != api.MachineImageReady {
+		return fmt.Errorf("Machine image state: %s", image.Status.State)
+	}
+
 	if vol, err := ctrl.lhClient.GetVolume(machine.Name); err != nil {
 		return err
 	} else if vol == nil {
-		if err := ctrl.lhClient.CreateVolume(machine); err != nil {
+		if err := ctrl.lhClient.CreateVolume(machine, image); err != nil {
 			return err
 		}
 	}
@@ -54,7 +65,7 @@ func (ctrl *VirtualMachineController) createLonghornVolume(machine *api.VirtualM
 		if !apierrors.IsNotFound(err) {
 			return err
 		}
-		if err := ctrl.createPersistentVolume(machine); err != nil {
+		if err := ctrl.createPersistentVolume(machine, image); err != nil {
 			return err
 		}
 	}
@@ -63,7 +74,7 @@ func (ctrl *VirtualMachineController) createLonghornVolume(machine *api.VirtualM
 		if !apierrors.IsNotFound(err) {
 			return err
 		}
-		if err := ctrl.createPersistentVolumeClaim(machine); err != nil {
+		if err := ctrl.createPersistentVolumeClaim(machine, image); err != nil {
 			return err
 		}
 	}
@@ -79,6 +90,7 @@ func (ctrl *VirtualMachineController) deleteLonghornVolume(machine *api.VirtualM
 		}
 	}
 
+	// FIXME maybe don't delete both?
 	if err := ctrl.kubeClient.CoreV1().PersistentVolumes().Delete(machine.Name, &metav1.DeleteOptions{}); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return err
@@ -93,7 +105,8 @@ func (ctrl *VirtualMachineController) deleteLonghornVolume(machine *api.VirtualM
 	return nil
 }
 
-func (ctrl *VirtualMachineController) createPersistentVolume(machine *api.VirtualMachine) error {
+func (ctrl *VirtualMachineController) createPersistentVolume(machine *api.VirtualMachine, image *api.MachineImage) error {
+
 	_, err := ctrl.kubeClient.CoreV1().PersistentVolumes().Create(&corev1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: machine.Name,
@@ -103,7 +116,7 @@ func (ctrl *VirtualMachineController) createPersistentVolume(machine *api.Virtua
 				corev1.ReadWriteOnce,
 			},
 			Capacity: map[corev1.ResourceName]resource.Quantity{
-				corev1.ResourceStorage: resource.MustParse(machine.Spec.Volume.Longhorn.Size),
+				corev1.ResourceStorage: resource.MustParse(strconv.Itoa(image.Spec.SizeGiB) + "Gi"),
 			},
 			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
 			PersistentVolumeSource: corev1.PersistentVolumeSource{
@@ -122,7 +135,7 @@ func (ctrl *VirtualMachineController) createPersistentVolume(machine *api.Virtua
 
 var noStorageClass = ""
 
-func (ctrl *VirtualMachineController) createPersistentVolumeClaim(machine *api.VirtualMachine) error {
+func (ctrl *VirtualMachineController) createPersistentVolumeClaim(machine *api.VirtualMachine, image *api.MachineImage) error {
 	_, err := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(common.NamespaceVM).Create(&corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: machine.Name,
@@ -133,7 +146,7 @@ func (ctrl *VirtualMachineController) createPersistentVolumeClaim(machine *api.V
 			},
 			Resources: corev1.ResourceRequirements{
 				Requests: map[corev1.ResourceName]resource.Quantity{
-					corev1.ResourceStorage: resource.MustParse(machine.Spec.Volume.Longhorn.Size),
+					corev1.ResourceStorage: resource.MustParse(strconv.Itoa(image.Spec.SizeGiB) + "Gi"),
 				},
 			},
 			StorageClassName: &noStorageClass,

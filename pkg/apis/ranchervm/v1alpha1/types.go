@@ -16,16 +16,6 @@ type VirtualMachine struct {
 	Status VirtualMachineStatus `json:"status"`
 }
 
-type MachineImageType string
-
-const (
-	MachineImageAndroidX86 MachineImageType = "android-x86"
-	MachineImageCentOS     MachineImageType = "centos"
-	MachineImageRancherOS  MachineImageType = "rancheros"
-	MachineImageUbuntu     MachineImageType = "ubuntu"
-	MachineImageWindows7   MachineImageType = "windows7"
-)
-
 type ActionType string
 
 const (
@@ -36,13 +26,12 @@ const (
 
 // VirtualMachineSpec is the spec for a VirtualMachine resource
 type VirtualMachineSpec struct {
-	Cpus     int32 `json:"cpus"`
-	MemoryMB int32 `json:"memory_mb"`
-	// +optional
-	MachineImage MachineImageType `json:"image"`
-	Action       ActionType       `json:"action"`
-	PublicKeys   []string         `json:"public_keys"`
-	HostedNovnc  bool             `json:"hosted_novnc"`
+	Cpus         int32      `json:"cpus"`
+	MemoryMB     int32      `json:"memory_mb"`
+	MachineImage string     `json:"image"`
+	Action       ActionType `json:"action"`
+	PublicKeys   []string   `json:"public_keys"`
+	HostedNovnc  bool       `json:"hosted_novnc"`
 	// NodeName is the name of the node where the virtual machine should run.
 	// This is mutable at runtime and will trigger a live migration.
 	// +optional
@@ -56,16 +45,14 @@ type VirtualMachineSpec struct {
 }
 
 type VolumeSource struct {
-	EmptyDir *EmptyDirVolumeSource `json:"emptyDir,omitempty"`
+	EmptyDir *EmptyDirVolumeSource `json:"empty_dir,omitempty"`
 	Longhorn *LonghornVolumeSource `json:"longhorn,omitempty"`
 }
 
 type EmptyDirVolumeSource struct{}
 
 type LonghornVolumeSource struct {
-	Size                string `json:"size"`
 	Frontend            string `json:"frontend"`
-	BaseImage           string `json:"base_image"`
 	NumberOfReplicas    int    `json:"number_of_replicas"`
 	StaleReplicaTimeout int    `json:"stale_replica_timeout"`
 }

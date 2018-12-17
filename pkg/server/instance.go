@@ -162,7 +162,7 @@ func (s *server) createMachineSpec(ic *InstanceCreate) vmapi.VirtualMachineSpec 
 	return vmapi.VirtualMachineSpec{
 		Cpus:         int32(ic.Cpus),
 		MemoryMB:     int32(ic.Memory),
-		MachineImage: vmapi.MachineImageType(ic.Image),
+		MachineImage: ic.Image,
 		Action:       vmapi.ActionType(ic.Action),
 		PublicKeys:   ic.PublicKeys,
 		HostedNovnc:  ic.HostedNovnc,

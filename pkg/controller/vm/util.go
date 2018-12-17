@@ -53,7 +53,7 @@ func CreateConsoleProbe() *corev1.Probe {
 	}
 }
 
-func (ctrl *VirtualMachineController) createLonghornMachinePod(machine *v1alpha1.VirtualMachine, migrate bool) *corev1.Pod {
+func (ctrl *VirtualMachineController) createLonghornMachinePod(machine *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, migrate bool) *corev1.Pod {
 	cpu := strconv.Itoa(int(machine.Spec.Cpus))
 	mem := strconv.Itoa(int(machine.Spec.MemoryMB))
 	kvmextraargs := string(machine.Spec.KvmArgs)
@@ -131,7 +131,7 @@ func (ctrl *VirtualMachineController) createLonghornMachinePod(machine *v1alpha1
 
 	ctrl.addResourceRequirements(pod, machine)
 
-	ctrl.addPublicKeys(pod, machine)
+	ctrl.addPublicKeys(pod, publicKeys)
 
 	if migrate {
 		addMigratePort(pod)
@@ -156,21 +156,20 @@ func (ctrl *VirtualMachineController) getImagePullSecrets() (refs []corev1.Local
 
 var privileged = true
 
-func (ctrl *VirtualMachineController) makeVMPod(machine *v1alpha1.VirtualMachine, iface string, noResourceLimits bool, migrate bool) *corev1.Pod {
+func (ctrl *VirtualMachineController) createMachinePod(machine *v1alpha1.VirtualMachine, publicKeys []*v1alpha1.Credential, image *v1alpha1.MachineImage, migrate bool) *corev1.Pod {
 	var hugePagesVolume corev1.Volume
 	var machineImageVolume corev1.Volume
 	var machineVolumesVolume corev1.Volume
 
 	cpu := strconv.Itoa(int(machine.Spec.Cpus))
 	mem := strconv.Itoa(int(machine.Spec.MemoryMB))
-	image := string(machine.Spec.MachineImage)
 	kvmextraargs := string(machine.Spec.KvmArgs)
 
 	consoleProbe := CreateConsoleProbe()
 
 	machineContainer := corev1.Container{
 		Name:            common.LabelRoleVM,
-		Image:           image,
+		Image:           image.Spec.DockerImage,
 		ImagePullPolicy: corev1.PullAlways,
 		Command:         []string{"/usr/bin/startvm"},
 		Env: []corev1.EnvVar{
@@ -248,7 +247,6 @@ func (ctrl *VirtualMachineController) makeVMPod(machine *v1alpha1.VirtualMachine
 			Annotations: map[string]string{
 				"cpus":      cpu,
 				"memory_mb": mem,
-				"image":     image,
 				"id":        machine.Status.ID,
 				"mac":       machine.Status.MAC,
 			},
@@ -285,7 +283,7 @@ func (ctrl *VirtualMachineController) makeVMPod(machine *v1alpha1.VirtualMachine
 
 	ctrl.addResourceRequirements(machinePod, machine)
 
-	ctrl.addPublicKeys(machinePod, machine)
+	ctrl.addPublicKeys(machinePod, publicKeys)
 
 	if migrate {
 		addMigratePort(machinePod)
@@ -336,16 +334,19 @@ func (ctrl *VirtualMachineController) addResourceRequirements(pod *corev1.Pod, m
 	}
 }
 
-func (ctrl *VirtualMachineController) addPublicKeys(pod *corev1.Pod, machine *v1alpha1.VirtualMachine) {
+func (ctrl *VirtualMachineController) getPublicKeys(machine *v1alpha1.VirtualMachine) ([]*v1alpha1.Credential, error) {
 	var publicKeys []*v1alpha1.Credential
 	for _, publicKeyName := range machine.Spec.PublicKeys {
 		publicKey, err := ctrl.credLister.Get(publicKeyName)
 		if err != nil {
-			glog.Warningf("Public key (%s) error: %v", publicKeyName, err)
-			continue
+			return nil, err
 		}
 		publicKeys = append(publicKeys, publicKey)
 	}
+	return publicKeys, nil
+}
+
+func (ctrl *VirtualMachineController) addPublicKeys(pod *corev1.Pod, publicKeys []*v1alpha1.Credential) {
 	pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env,
 		common.MakeEnvVar("PUBLIC_KEY_COUNT", strconv.Itoa(len(publicKeys)), nil))
 	for i, publicKey := range publicKeys {

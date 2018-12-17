@@ -66,9 +66,7 @@ func isValidNodeName(nodeName string) bool {
 
 func isValidVolume(volume vmapi.VolumeSource) bool {
 	if volume.Longhorn != nil && volume.EmptyDir == nil {
-		return volume.Longhorn.BaseImage != "" &&
-			volume.Longhorn.Size != "" &&
-			volume.Longhorn.NumberOfReplicas >= 2 &&
+		return volume.Longhorn.NumberOfReplicas >= 2 &&
 			volume.Longhorn.NumberOfReplicas <= 10 &&
 			volume.Longhorn.StaleReplicaTimeout > 0
 	} else if volume.EmptyDir != nil && volume.Longhorn == nil {

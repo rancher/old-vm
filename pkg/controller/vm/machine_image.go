@@ -69,6 +69,14 @@ func (ctrl *VirtualMachineController) processMachineImage(name string) error {
 			return err
 		}
 
+		if machineImage.Spec.SizeGiB == 0 {
+			parentImage, err := ctrl.machineImageLister.Get(machine.Spec.MachineImage)
+			if err != nil {
+				return err
+			}
+			return ctrl.setMachineImageSize(machineImage, parentImage.Spec.SizeGiB)
+		}
+
 		if machine.Spec.Volume.Longhorn == nil {
 			err := errors.New(fmt.Sprintf("machine (%s) referenced by machine image (%s) missing Longhorn volume (%+v)",
 				machine.Name, machineImage.Name, machine.Spec.Volume))
@@ -120,6 +128,7 @@ func (ctrl *VirtualMachineController) createBackup(machineImage *api.MachineImag
 	volumeName := machineImage.Spec.FromVirtualMachine
 	snapshotName := machineImage.Status.Snapshot
 
+	// FIXME sometimes picks wrong backup
 	backup, err := ctrl.lhClient.GetBackup(volumeName, snapshotName)
 	if err != nil {
 		return err
@@ -132,6 +141,10 @@ func (ctrl *VirtualMachineController) createBackup(machineImage *api.MachineImag
 		if err != nil {
 			return err
 		}
+	}
+	if backup == nil {
+		ctrl.machineImageQueue.AddRateLimited(machineImage.Name)
+		return nil
 	}
 	u, err := url.Parse(backup.URL)
 	if err != nil {
@@ -272,8 +285,9 @@ func getPullImagePod(machineImage *api.MachineImage, node *v1.Node) *v1.Pod {
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
 				{
-					Name:  "pull",
-					Image: machineImage.Spec.DockerImage,
+					Name:            "pull",
+					Image:           machineImage.Spec.DockerImage,
+					ImagePullPolicy: v1.PullAlways,
 					Command: []string{"/bin/sh", "-c",
 						"echo Pulled successfully"},
 				},
@@ -311,6 +325,13 @@ func (ctrl *VirtualMachineController) setMachineImagePublished(machineImage *api
 	return
 }
 
+func (ctrl *VirtualMachineController) setMachineImageSize(machineImage *api.MachineImage, size int) (err error) {
+	mutable := machineImage.DeepCopy()
+	mutable.Spec.SizeGiB = size
+	mutable, err = ctrl.vmClient.VirtualmachineV1alpha1().MachineImages().Update(mutable)
+	return
+}
+
 func (ctrl *VirtualMachineController) setMachineImageState(machineImage *api.MachineImage, state api.MachineImageState) (err error) {
 	mutable := machineImage.DeepCopy()
 	mutable.Status.State = state
@@ -319,11 +340,23 @@ func (ctrl *VirtualMachineController) setMachineImageState(machineImage *api.Mac
 }
 
 func (ctrl *VirtualMachineController) updateNodesReady(machineImage *api.MachineImage, state api.MachineImageState, nodesReady []string) (err error) {
+	oldState := machineImage.Status.State
 	mutable := machineImage.DeepCopy()
 	mutable.Status.State = state
 	mutable.Status.Nodes = nodesReady
 	sort.Strings(mutable.Status.Nodes)
 	mutable, err = ctrl.vmClient.VirtualmachineV1alpha1().MachineImages().Update(mutable)
+	if err == nil && oldState == api.MachineImageProvision && state == api.MachineImageReady {
+		machines, err := ctrl.machineLister.List(labels.Everything())
+		if err != nil {
+			return err
+		}
+		for _, machine := range machines {
+			if machine.Spec.MachineImage == machineImage.Name {
+				ctrl.machineQueue.Add(machine.Name)
+			}
+		}
+	}
 	return
 }
 

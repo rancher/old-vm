@@ -11,7 +11,7 @@ import (
 	"github.com/rancher/vm/pkg/common"
 )
 
-func NewMigrationJob(vm *v1alpha1.VirtualMachine, podName, targetURI string) *batchv1.Job {
+func NewMigrationJob(vm *v1alpha1.VirtualMachine, podName, targetURI string, imagePullSecrets []corev1.LocalObjectReference) *batchv1.Job {
 	objectMeta := metav1.ObjectMeta{
 		Name: fmt.Sprintf("%s-migrate", vm.Name),
 		Labels: map[string]string{
@@ -60,6 +60,7 @@ func NewMigrationJob(vm *v1alpha1.VirtualMachine, podName, targetURI string) *ba
 							},
 						},
 					},
+					ImagePullSecrets: imagePullSecrets,
 				},
 			},
 		},

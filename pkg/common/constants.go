@@ -13,11 +13,12 @@ const (
 
 	RancherOUI = "06:fe"
 
-	LabelApp          = "ranchervm"
-	LabelRoleMigrate  = "migrate"
-	LabelRoleVM       = "vm"
-	LabelRoleNoVNC    = "novnc"
-	LabelNodeHostname = "kubernetes.io/hostname"
+	LabelApp              = "ranchervm"
+	LabelRoleMigrate      = "migrate"
+	LabelRoleVM           = "vm"
+	LabelRoleNoVNC        = "novnc"
+	LabelRoleMachineImage = "machineimage"
+	LabelNodeHostname     = "kubernetes.io/hostname"
 )
 
 var (

@@ -16,16 +16,6 @@ type VirtualMachine struct {
 	Status VirtualMachineStatus `json:"status"`
 }
 
-type MachineImageType string
-
-const (
-	MachineImageAndroidX86 MachineImageType = "android-x86"
-	MachineImageCentOS     MachineImageType = "centos"
-	MachineImageRancherOS  MachineImageType = "rancheros"
-	MachineImageUbuntu     MachineImageType = "ubuntu"
-	MachineImageWindows7   MachineImageType = "windows7"
-)
-
 type ActionType string
 
 const (
@@ -36,13 +26,12 @@ const (
 
 // VirtualMachineSpec is the spec for a VirtualMachine resource
 type VirtualMachineSpec struct {
-	Cpus     int32 `json:"cpus"`
-	MemoryMB int32 `json:"memory_mb"`
-	// +optional
-	MachineImage MachineImageType `json:"image"`
-	Action       ActionType       `json:"action"`
-	PublicKeys   []string         `json:"public_keys"`
-	HostedNovnc  bool             `json:"hosted_novnc"`
+	Cpus         int32      `json:"cpus"`
+	MemoryMB     int32      `json:"memory_mb"`
+	MachineImage string     `json:"image"`
+	Action       ActionType `json:"action"`
+	PublicKeys   []string   `json:"public_keys"`
+	HostedNovnc  bool       `json:"hosted_novnc"`
 	// NodeName is the name of the node where the virtual machine should run.
 	// This is mutable at runtime and will trigger a live migration.
 	// +optional
@@ -56,16 +45,14 @@ type VirtualMachineSpec struct {
 }
 
 type VolumeSource struct {
-	EmptyDir *EmptyDirVolumeSource `json:"emptyDir,omitempty"`
+	EmptyDir *EmptyDirVolumeSource `json:"empty_dir,omitempty"`
 	Longhorn *LonghornVolumeSource `json:"longhorn,omitempty"`
 }
 
 type EmptyDirVolumeSource struct{}
 
 type LonghornVolumeSource struct {
-	Size                string `json:"size"`
 	Frontend            string `json:"frontend"`
-	BaseImage           string `json:"base_image"`
 	NumberOfReplicas    int    `json:"number_of_replicas"`
 	StaleReplicaTimeout int    `json:"stale_replica_timeout"`
 }
@@ -198,6 +185,56 @@ type CredentialList struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// MachineImage is a virtual machine image packaged in a Docker image
+type MachineImage struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   MachineImageSpec   `json:"spec"`
+	Status MachineImageStatus `json:"status"`
+}
+
+type MachineImageSpec struct {
+	DockerImage        string `json:"docker_image"`
+	SizeGiB            int    `json:"size_gib"`
+	FromVirtualMachine string `json:"from_vm"`
+}
+
+type MachineImageState string
+
+const (
+	MachineImageSnapshot  = MachineImageState("snapshot")
+	MachineImageBackup    = MachineImageState("backup")
+	MachineImagePublish   = MachineImageState("publish")
+	MachineImageProvision = MachineImageState("provision")
+	MachineImageReady     = MachineImageState("ready")
+	MachineImageFailed    = MachineImageState("failed")
+	MachineImageUnknown   = MachineImageState("unknown")
+)
+
+type MachineImageStatus struct {
+	Snapshot  string            `json:"snapshot"`
+	BackupURL string            `json:"backup_url"`
+	BaseImage string            `json:"base_image"`
+	Published bool              `json:"published"`
+	State     MachineImageState `json:"state"`
+	Nodes     []string          `json:"nodes"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+type MachineImageList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []MachineImage `json:"items"`
+}
+
+// +genclient
+// +genclient:noStatus
+// +genclient:nonNamespaced
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
 // Setting is a generic RancherVM setting
 type Setting struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -238,6 +275,13 @@ const (
 	SettingNameLonghornInsecureSkipVerify = SettingName("longhorn-insecure-skip-verify")
 	SettingNameLonghornAccessKey          = SettingName("longhorn-access-key")
 	SettingNameLonghornSecretKey          = SettingName("longhorn-secret-key")
+	// TODO either get rid of this setting or use it to simplify naming new registry images
+	SettingNameRegistryAddress          = SettingName("registry-address")
+	SettingNameRegistrySecret           = SettingName("registry-secret")
+	SettingNameRegistryInsecure         = SettingName("registry-insecure")
+	SettingNameImageKaniko              = SettingName("image-kaniko")
+	SettingNameImageLonghornEngine      = SettingName("image-longhorn-engine")
+	SettingNameImageMinimumAvailability = SettingName("image-minimum-replicas")
 )
 
 var (
@@ -246,13 +290,21 @@ var (
 		SettingNameLonghornInsecureSkipVerify,
 		SettingNameLonghornAccessKey,
 		SettingNameLonghornSecretKey,
+		SettingNameRegistryAddress,
+		SettingNameRegistrySecret,
+		SettingNameRegistryInsecure,
+		SettingNameImageKaniko,
+		SettingNameImageLonghornEngine,
+		SettingNameImageMinimumAvailability,
 	}
 )
 
 type SettingCategory string
 
 const (
-	SettingCategoryStorage = SettingCategory("storage")
+	SettingCategoryStorage  = SettingCategory("storage")
+	SettingCategoryRegistry = SettingCategory("registry")
+	SettingCategoryImage    = SettingCategory("image")
 )
 
 type SettingDefinition struct {
@@ -271,6 +323,12 @@ var (
 		SettingNameLonghornInsecureSkipVerify: SettingDefinitionLonghornInsecureSkipVerify,
 		SettingNameLonghornAccessKey:          SettingDefinitionLonghornAccessKey,
 		SettingNameLonghornSecretKey:          SettingDefinitionLonghornSecretKey,
+		SettingNameRegistryAddress:            SettingDefinitionRegistryAddress,
+		SettingNameRegistrySecret:             SettingDefinitionRegistrySecret,
+		SettingNameRegistryInsecure:           SettingDefinitionRegistryInsecure,
+		SettingNameImageKaniko:                SettingDefinitionImageKaniko,
+		SettingNameImageLonghornEngine:        SettingDefinitionImageLonghornEngine,
+		SettingNameImageMinimumAvailability:   SettingDefinitionImageMinimumAvailability,
 	}
 
 	SettingDefinitionLonghornEndpoint = SettingDefinition{
@@ -308,5 +366,63 @@ var (
 		Type:        SettingTypeString,
 		Required:    false,
 		ReadOnly:    false,
+	}
+
+	SettingDefinitionRegistryAddress = SettingDefinition{
+		DisplayName: "Registry Address",
+		Description: "Docker registry address in host:port form, used for pushing/pulling machine images",
+		Category:    SettingCategoryRegistry,
+		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+
+	SettingDefinitionRegistrySecret = SettingDefinition{
+		DisplayName: "Registry Secret",
+		Description: "Required for authenticated registries. Secret name of docker-registry type.",
+		Category:    SettingCategoryRegistry,
+		Type:        SettingTypeString,
+		Required:    false,
+		ReadOnly:    false,
+	}
+
+	SettingDefinitionRegistryInsecure = SettingDefinition{
+		DisplayName: "Insecure Registry",
+		Description: "Registry is insecure (HTTP). Requires manual Docker daemon configuration.",
+		Category:    SettingCategoryRegistry,
+		Type:        SettingTypeBool,
+		Required:    false,
+		ReadOnly:    false,
+		Default:     "false",
+	}
+
+	SettingDefinitionImageKaniko = SettingDefinition{
+		DisplayName: "Kaniko Image",
+		Description: "Docker debug image for Kaniko executor. Used to publish new Docker images.",
+		Category:    SettingCategoryImage,
+		Type:        SettingTypeString,
+		Required:    true,
+		ReadOnly:    false,
+		Default:     "gcr.io/kaniko-project/executor:debug",
+	}
+
+	SettingDefinitionImageLonghornEngine = SettingDefinition{
+		DisplayName: "Longhorn Engine Image",
+		Description: "Docker image for Longhorn Engine. Used to create new machine images.",
+		Category:    SettingCategoryImage,
+		Type:        SettingTypeString,
+		Required:    true,
+		ReadOnly:    false,
+		Default:     "llparse/longhorn-engine:df56c7e-dirty",
+	}
+
+	SettingDefinitionImageMinimumAvailability = SettingDefinition{
+		DisplayName: "Machine Image Availability",
+		Description: "Image must be present on a minimum number of nodes before considered ready.",
+		Category:    SettingCategoryImage,
+		Type:        SettingTypeInt,
+		Required:    true,
+		ReadOnly:    false,
+		Default:     "3",
 	}
 )

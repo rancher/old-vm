@@ -1,221 +1,157 @@
 package vm
 
 import (
-	"bytes"
-	"crypto/tls"
-	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
+	"strconv"
+	"strings"
 
-	vmapi "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
-	vmlisters "github.com/rancher/vm/pkg/client/listers/ranchervm/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	api "github.com/rancher/vm/pkg/apis/ranchervm/v1alpha1"
+	"github.com/rancher/vm/pkg/common"
 )
 
-type LonghornClient struct {
-	client               *http.Client
-	endpoint             string
-	accessKey, secretKey string
-}
-
-func NewLonghornClient(endpoint, accessKey, secretKey string, insecureSkipVerify bool) *LonghornClient {
-	var client *http.Client
-	if insecureSkipVerify {
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		client = &http.Client{Transport: tr}
-	} else {
-		client = http.DefaultClient
-	}
-
-	return &LonghornClient{client, endpoint, accessKey, secretKey}
-}
-
-func NewLonghornClientFromSettings(settingLister vmlisters.SettingLister) (*LonghornClient, error) {
-	endpointSetting, err := settingLister.Get(string(vmapi.SettingNameLonghornEndpoint))
+func (ctrl *VirtualMachineController) updateLonghornClient() error {
+	endpointSetting, err := ctrl.settingLister.Get(string(api.SettingNameLonghornEndpoint))
 	if err != nil {
-		return nil, err
+		return err
 	}
-	endpoint := endpointSetting.Spec.Value
+	endpoint := strings.TrimSuffix(endpointSetting.Spec.Value, "/")
 
-	insecureSkipVerifySetting, err := settingLister.Get(string(vmapi.SettingNameLonghornInsecureSkipVerify))
+	accessKeySetting, err := ctrl.settingLister.Get(string(api.SettingNameLonghornAccessKey))
 	if err != nil {
-		return nil, err
-	}
-	insecureSkipVerify := insecureSkipVerifySetting.Spec.Value == "true"
-
-	accessKeySetting, err := settingLister.Get(string(vmapi.SettingNameLonghornAccessKey))
-	if err != nil {
-		return nil, err
+		return err
 	}
 	accessKey := accessKeySetting.Spec.Value
 
-	secretKeySetting, err := settingLister.Get(string(vmapi.SettingNameLonghornSecretKey))
+	secretKeySetting, err := ctrl.settingLister.Get(string(api.SettingNameLonghornSecretKey))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	secretKey := secretKeySetting.Spec.Value
 
-	return NewLonghornClient(endpoint, accessKey, secretKey, insecureSkipVerify), nil
-}
-
-func (c *LonghornClient) get(path string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", c.endpoint+path, nil)
+	insecureSkipVerifySetting, err := ctrl.settingLister.Get(string(api.SettingNameLonghornInsecureSkipVerify))
 	if err != nil {
-		return nil, err
+		return err
 	}
+	insecureSkipVerify := insecureSkipVerifySetting.Spec.Value == "true"
 
-	if c.accessKey != "" && c.secretKey != "" {
-		req.SetBasicAuth(c.accessKey, c.secretKey)
-	}
-	return c.client.Do(req)
+	ctrl.lhClient = NewLonghornClient(endpoint, accessKey, secretKey, insecureSkipVerify)
+	return nil
 }
 
-func (c *LonghornClient) post(path string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest("POST", c.endpoint+path, body)
-	if err != nil {
-		return nil, err
-	}
-
-	if c.accessKey != "" && c.secretKey != "" {
-		req.SetBasicAuth(c.accessKey, c.secretKey)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return c.client.Do(req)
-}
-
-func (c *LonghornClient) put(path string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest("PUT", c.endpoint+path, body)
-	if err != nil {
-		return nil, err
-	}
-
-	if c.accessKey != "" && c.secretKey != "" {
-		req.SetBasicAuth(c.accessKey, c.secretKey)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return c.client.Do(req)
-}
-
-func (c *LonghornClient) delete(path string) (*http.Response, error) {
-	req, err := http.NewRequest("DELETE", c.endpoint+path, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if c.accessKey != "" && c.secretKey != "" {
-		req.SetBasicAuth(c.accessKey, c.secretKey)
-	}
-	return c.client.Do(req)
-}
-
-type LonghornVolume struct {
-	Name                string `json:"name"`
-	Frontend            string `json:"frontend"`
-	Size                string `json:"size"`
-	BaseImage           string `json:"baseImage"`
-	NumberOfReplicas    int    `json:"numberOfReplicas"`
-	StaleReplicaTimeout int    `json:"staleReplicaTimeout"`
-
-	Robustness  string       `json:"robustness"`
-	State       string       `json:"state"`
-	Controllers []Controller `json:"controllers"`
-}
-
-type Controller struct {
-	Name     string `json:"name"`
-	Endpoint string `json:"endpoint"`
-	NodeID   string `json:"hostId"`
-}
-
-func (c *LonghornClient) CreateVolume(vm *vmapi.VirtualMachine) error {
-	vol := &LonghornVolume{
-		Name:                vm.Name,
-		Size:                vm.Spec.Volume.Longhorn.Size,
-		Frontend:            vm.Spec.Volume.Longhorn.Frontend,
-		BaseImage:           vm.Spec.Volume.Longhorn.BaseImage,
-		NumberOfReplicas:    vm.Spec.Volume.Longhorn.NumberOfReplicas,
-		StaleReplicaTimeout: vm.Spec.Volume.Longhorn.StaleReplicaTimeout,
-	}
-
-	buf, err := json.Marshal(vol)
+func (ctrl *VirtualMachineController) createLonghornVolume(machine *api.VirtualMachine) error {
+	image, err := ctrl.machineImageLister.Get(machine.Spec.MachineImage)
 	if err != nil {
 		return err
 	}
 
-	resp, err := c.post("/v1/volumes", bytes.NewReader(buf))
-	if err != nil {
-		return err
+	if image.Status.State != api.MachineImageReady {
+		return fmt.Errorf("Machine image state: %s", image.Status.State)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("CreateVolume failed: %v", resp.Status)
+	if vol, err := ctrl.lhClient.GetVolume(machine.Name); err != nil {
+		return err
+	} else if vol == nil {
+		if err := ctrl.lhClient.CreateVolume(machine, image); err != nil {
+			return err
+		}
+	}
+
+	if _, err := ctrl.pvLister.Get(machine.Name); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+		if err := ctrl.createPersistentVolume(machine, image); err != nil {
+			return err
+		}
+	}
+
+	if _, err := ctrl.pvcLister.PersistentVolumeClaims(common.NamespaceVM).Get(machine.Name); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+		if err := ctrl.createPersistentVolumeClaim(machine, image); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (c *LonghornClient) GetVolume(name string) (*LonghornVolume, error) {
-	resp, err := c.get("/v1/volumes/" + name)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		buf, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
+func (ctrl *VirtualMachineController) deleteLonghornVolume(machine *api.VirtualMachine) error {
+	if vol, err := ctrl.lhClient.GetVolume(machine.Name); err != nil {
+		return err
+	} else if vol != nil {
+		if err := ctrl.lhClient.DeleteVolume(machine.Name); err != nil {
+			return err
 		}
+	}
 
-		var vol LonghornVolume
-		if err := json.Unmarshal(buf, &vol); err != nil {
-			return nil, err
+	// FIXME maybe don't delete both?
+	if err := ctrl.kubeClient.CoreV1().PersistentVolumes().Delete(machine.Name, &metav1.DeleteOptions{}); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
 		}
-		return &vol, nil
-	} else if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
-	}
-	return nil, fmt.Errorf("GetVolume failed: %v", resp.Status)
-}
-
-type AttachVolumeRequest struct {
-	NodeID string `json:"hostId"`
-}
-
-func (c *LonghornClient) AttachVolume(name, nodeID string) error {
-	req := AttachVolumeRequest{
-		NodeID: nodeID,
 	}
 
-	buf, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-
-	resp, err := c.post("/v1/volumes/"+name+"?action=attach", bytes.NewReader(buf))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		return nil
-	}
-	return fmt.Errorf("AttachVolume failed: %v", resp.Status)
-}
-
-func (c *LonghornClient) DeleteVolume(name string) error {
-	resp, err := c.delete("/v1/volumes/" + name)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("DeleteVolume failed: %v", resp.Status)
+	if err := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(common.NamespaceVM).Delete(machine.Name, &metav1.DeleteOptions{}); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
 	}
 	return nil
+}
+
+func (ctrl *VirtualMachineController) createPersistentVolume(machine *api.VirtualMachine, image *api.MachineImage) error {
+
+	_, err := ctrl.kubeClient.CoreV1().PersistentVolumes().Create(&corev1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: machine.Name,
+		},
+		Spec: corev1.PersistentVolumeSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Capacity: map[corev1.ResourceName]resource.Quantity{
+				corev1.ResourceStorage: resource.MustParse(strconv.Itoa(image.Spec.SizeGiB) + "Gi"),
+			},
+			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
+			PersistentVolumeSource: corev1.PersistentVolumeSource{
+				CSI: &corev1.CSIPersistentVolumeSource{
+					Driver: "io.rancher.longhorn",
+					VolumeAttributes: map[string]string{
+						"frontend": "iscsi",
+					},
+					VolumeHandle: machine.Name,
+				},
+			},
+		},
+	})
+	return err
+}
+
+var noStorageClass = ""
+
+func (ctrl *VirtualMachineController) createPersistentVolumeClaim(machine *api.VirtualMachine, image *api.MachineImage) error {
+	_, err := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(common.NamespaceVM).Create(&corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: machine.Name,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: map[corev1.ResourceName]resource.Quantity{
+					corev1.ResourceStorage: resource.MustParse(strconv.Itoa(image.Spec.SizeGiB) + "Gi"),
+				},
+			},
+			StorageClassName: &noStorageClass,
+			VolumeName:       machine.Name,
+		},
+	})
+	return err
 }

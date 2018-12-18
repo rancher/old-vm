@@ -1,0 +1,7 @@
+apiVersion: vm.rancher.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: ubuntu-rancher-2.1.1
+spec:
+  image: registry.james.tools:5000/ubuntu:rancher-2.1.1
+  size_gib: 50

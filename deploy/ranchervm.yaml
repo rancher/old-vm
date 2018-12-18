@@ -24,7 +24,7 @@ rules:
   resources: ["pods", "nodes", "services", "jobs", "endpoints"]
   verbs: ["*"]
 - apiGroups: ["vm.rancher.io"]
-  resources: ["virtualmachines", "arptables", "credentials", "settings"]
+  resources: ["virtualmachines", "arptables", "credentials", "settings", "machineimages"]
   verbs: ["*"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
@@ -111,6 +111,25 @@ spec:
     listKind: SettingList
     plural: settings
     singular: setting
+  scope: Cluster
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    ranchervm-system: MachineImage
+  name: machineimages.vm.rancher.io
+spec:
+  group: vm.rancher.io
+  version: v1alpha1
+  names:
+    kind: MachineImage
+    listKind: MachineImageList
+    plural: machineimages
+    shortNames:
+    - img
+    - imgs
+    singular: machineimage
   scope: Cluster
 ---
 apiVersion: apps/v1beta1

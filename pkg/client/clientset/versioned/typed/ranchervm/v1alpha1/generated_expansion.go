@@ -22,6 +22,8 @@ type ARPTableExpansion interface{}
 
 type CredentialExpansion interface{}
 
+type MachineImageExpansion interface{}
+
 type SettingExpansion interface{}
 
 type VirtualMachineExpansion interface{}

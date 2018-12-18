@@ -60,14 +60,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	config.QPS = 50
-	config.Burst = 100
 
 	vmClientset := versioned.NewForConfigOrDie(config)
-	vmInformerFactory := externalversions.NewSharedInformerFactory(vmClientset, 30*time.Second)
+	vmInformerFactory := externalversions.NewSharedInformerFactory(vmClientset, 120*time.Second)
 
 	kubeClientset := kubernetes.NewForConfigOrDie(config)
-	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClientset, 30*time.Second)
+	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClientset, 120*time.Second)
 
 	stopCh := makeStopChan()
 
@@ -80,9 +78,11 @@ func main() {
 			kubeInformerFactory.Core().V1().Services(),
 			kubeInformerFactory.Core().V1().PersistentVolumes(),
 			kubeInformerFactory.Core().V1().PersistentVolumeClaims(),
+			kubeInformerFactory.Core().V1().Nodes(),
 			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Credentials(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Settings(),
+			vmInformerFactory.Virtualmachine().V1alpha1().MachineImages(),
 			*bridgeIface,
 			*noResourceLimits,
 		).Run()
@@ -104,6 +104,7 @@ func main() {
 			vmInformerFactory.Virtualmachine().V1alpha1().VirtualMachines(),
 			kubeInformerFactory.Core().V1().Nodes(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Credentials(),
+			vmInformerFactory.Virtualmachine().V1alpha1().MachineImages(),
 			*listenAddress,
 		).Run(stopCh)
 	}

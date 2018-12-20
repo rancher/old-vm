@@ -299,14 +299,6 @@ func getPullImagePod(machineImage *api.MachineImage, node *v1.Node) *v1.Pod {
 }
 
 func nodeContainsImage(node *v1.Node, machineImage *api.MachineImage) bool {
-	// node.Status.Images doesn't always update
-	for _, image := range node.Status.Images {
-		for _, name := range image.Names {
-			if name == machineImage.Spec.DockerImage {
-				return true
-			}
-		}
-	}
 	for _, nodeName := range machineImage.Status.Nodes {
 		if nodeName == node.Name {
 			return true

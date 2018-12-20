@@ -89,8 +89,9 @@ func (s *server) MachineImageCreate(w http.ResponseWriter, r *http.Request) {
 			Name: mic.Name,
 		},
 		Spec: v1alpha1.MachineImageSpec{
-			DockerImage: mic.DockerImage,
-			SizeGiB:     mic.SizeGiB,
+			DockerImage:        mic.DockerImage,
+			SizeGiB:            mic.SizeGiB,
+			FromVirtualMachine: mic.FromVirtualMachine,
 		},
 	}
 

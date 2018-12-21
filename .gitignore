@@ -1,4 +1,5 @@
 bin/
+release/
 .vagrant/
 
 # RKE

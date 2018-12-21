@@ -1,10 +1,10 @@
 NAME = rancher/vm-tools
-VERSION = v0.1.1
+VERSION := $(shell cat ../../VERSION)
 BASE_IMAGE=RancherVM-debootstrap-ubuntu-1804.tgz
 
-.PHONY : all clean build
+.PHONY : all build clean push
 
-all: build tag_latest
+all: build
 
 build:
 	[ -f $(BASE_IMAGE) ] || wget https://s3-us-west-1.amazonaws.com/ranchervm/$(BASE_IMAGE)
@@ -13,9 +13,6 @@ build:
 clean:
 	rm -f $(BASE_IMAGE)
 
-tag_latest:
-	docker tag $(NAME):$(VERSION) $(NAME):latest
-
 push:
 	docker push $(NAME):$(VERSION)
-	docker push $(NAME):latest
+

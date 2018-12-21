@@ -1,10 +1,11 @@
-# Ignore images without cloud-init working
-SUBDIRS := vm-tools novnc centos fedora ubuntu
-#SUBDIRS := base rancheros ubuntu centos android-x86 fedora
+# SUBDIRS := $(wildcard */.)
+SUBDIRS := vm-tools novnc
 
-.PHONY : all $(SUBDIRS)
+TARGETS := all build push
 
-all : $(SUBDIRS)
+$(TARGETS): $(SUBDIRS)
 
-$(SUBDIRS) :
-	$(MAKE) -C $@ all
+$(SUBDIRS):
+	$(MAKE) -C $@ $(MAKECMDGOALS)
+
+.PHONY: $(TARGETS) $(SUBDIRS)

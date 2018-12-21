@@ -1,19 +1,13 @@
 NAME = rancher/vm-novnc
-VERSION = v0.1.0
+VERSION := $(shell cat ../../VERSION)
 
-.PHONY : all clean build
+.PHONY : all build push
 
-all: build tag_latest
+all: build
 
 build:
 	docker build -t $(NAME):$(VERSION) .
 
-clean:
-	rm -f $(BASE_IMAGE)
-
-tag_latest:
-	docker tag $(NAME):$(VERSION) $(NAME):latest
-
 push:
 	docker push $(NAME):$(VERSION)
-	docker push $(NAME):latest
+

@@ -1,4 +1,4 @@
-.PHONY: clean build install deps lint vet test dist-clean dist release tag-release
+.PHONY: clean build install deps update-deps lint vet test dist-clean dist release tag-release
 
 default: build
 
@@ -20,6 +20,10 @@ install: build
 deps:
 	go get -v github.com/tcnksm/ghr
 	go get -v github.com/golang/lint/golint
+	go get github.com/Masterminds/glide
+
+update-deps:
+	glide up
 
 lint:
 	@golint $$(go list ./... 2> /dev/null | grep -v /vendor/)

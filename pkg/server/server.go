@@ -21,6 +21,7 @@ const (
 	NodeResource           = "node"
 	CredentialResource     = "credential"
 	MachineImageResource   = "machineimage"
+	SettingResource        = "setting"
 )
 
 type SimpleResourceEventHandler struct{ ChangeFunc func() }
@@ -66,6 +67,8 @@ type server struct {
 	credListerSynced         cache.InformerSynced
 	machineImageLister       vmlisters.MachineImageLister
 	machineImageListerSynced cache.InformerSynced
+	settingLister            vmlisters.SettingLister
+	settingListerSynced      cache.InformerSynced
 
 	listenAddress string
 	watchers      []*Watcher
@@ -79,6 +82,7 @@ func NewServer(
 	nodeInformer coreinformers.NodeInformer,
 	credInformer vminformers.CredentialInformer,
 	machineImageInformer vminformers.MachineImageInformer,
+	settingInformer vminformers.SettingInformer,
 	listenAddress string,
 ) *server {
 
@@ -94,6 +98,8 @@ func NewServer(
 		credListerSynced:         credInformer.Informer().HasSynced,
 		machineImageLister:       machineImageInformer.Lister(),
 		machineImageListerSynced: machineImageInformer.Informer().HasSynced,
+		settingLister:            settingInformer.Lister(),
+		settingListerSynced:      settingInformer.Informer().HasSynced,
 
 		listenAddress: listenAddress,
 		watchers:      []*Watcher{},
@@ -103,13 +109,16 @@ func NewServer(
 	nodeInformer.Informer().AddEventHandler(s.notifyWatchersHandler(NodeResource))
 	credInformer.Informer().AddEventHandler(s.notifyWatchersHandler(CredentialResource))
 	machineImageInformer.Informer().AddEventHandler(s.notifyWatchersHandler(MachineImageResource))
+	settingInformer.Informer().AddEventHandler(s.notifyWatchersHandler(SettingResource))
 
 	return s
 }
 
 func (s *server) Run(stopCh <-chan struct{}) {
-	if !cache.WaitForCacheSync(stopCh, s.vmListerSynced, s.nodeListerSynced,
-		s.credListerSynced, s.machineImageListerSynced) {
+	if !cache.WaitForCacheSync(stopCh,
+		s.vmListerSynced, s.nodeListerSynced,
+		s.credListerSynced, s.machineImageListerSynced,
+		s.settingListerSynced) {
 		return
 	}
 
@@ -200,6 +209,15 @@ func (s *server) newRouter() *mux.Router {
 	r.Methods("POST").Path("/v1/machineimage").Handler(http.HandlerFunc(s.MachineImageCreate))
 	r.Methods("GET").Path("/v1/machineimage/{name}").Handler(http.HandlerFunc(s.MachineImageGet))
 	r.Methods("DELETE").Path("/v1/machineimage/{name}").Handler(http.HandlerFunc(s.MachineImageDelete))
+
+	settingWatcher := s.NewWatcher(SettingResource)
+	defer settingWatcher.Close()
+	settingListStream := NewStreamHandlerFunc(settingWatcher, s.settingList)
+	r.Path("/v1/ws/setting").Handler(http.HandlerFunc(settingListStream))
+	r.Path("/v1/ws/{period}/setting").Handler(http.HandlerFunc(settingListStream))
+	r.Methods("GET").Path("/v1/setting").Handler(http.HandlerFunc(s.SettingList))
+	r.Methods("GET").Path("/v1/setting/{name}").Handler(http.HandlerFunc(s.SettingGet))
+	r.Methods("PUT").Path("/v1/setting/{name}").Handler(http.HandlerFunc(s.SettingSet))
 
 	return r
 }

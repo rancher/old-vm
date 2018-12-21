@@ -7,8 +7,7 @@ import (
 )
 
 var (
-	nameRegexp = regexp.MustCompile("^[a-z0-9\\-]{1,128}$")
-	nsRegexp   = regexp.MustCompile("^[a-z0-9\\-]{1,64}$")
+	nameRegexp = regexp.MustCompile("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 )
 
 func isValidAction(action vmapi.ActionType) bool {
@@ -18,7 +17,7 @@ func isValidAction(action vmapi.ActionType) bool {
 }
 
 func isValidNamespace(namespace string) bool {
-	return nsRegexp.MatchString(namespace)
+	return nameRegexp.MatchString(namespace)
 }
 
 func isValidName(names ...string) bool {

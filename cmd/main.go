@@ -105,6 +105,7 @@ func main() {
 			kubeInformerFactory.Core().V1().Nodes(),
 			vmInformerFactory.Virtualmachine().V1alpha1().Credentials(),
 			vmInformerFactory.Virtualmachine().V1alpha1().MachineImages(),
+			vmInformerFactory.Virtualmachine().V1alpha1().Settings(),
 			*listenAddress,
 		).Run(stopCh)
 	}

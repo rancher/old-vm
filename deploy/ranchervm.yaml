@@ -21,7 +21,7 @@ rules:
   verbs:
   - "*"
 - apiGroups: ["", "batch"]
-  resources: ["pods", "nodes", "services", "jobs", "endpoints"]
+  resources: ["pods", "nodes", "services", "jobs", "endpoints", "persistentvolumes", "persistentvolumeclaims"]
   verbs: ["*"]
 - apiGroups: ["vm.rancher.io"]
   resources: ["virtualmachines", "arptables", "credentials", "settings", "machineimages"]
@@ -138,7 +138,7 @@ metadata:
   name: vm-controller
   namespace: ranchervm-system
 spec:
-  replicas: 2
+  replicas: 1
   template:
     metadata:
       labels:
@@ -155,15 +155,15 @@ spec:
             topologyKey: "kubernetes.io/hostname"
       containers:
       - name: vm-controller
-        image: rancher/vm:v0.1.0
+        image: rancher/vm:v0.2.0
         imagePullPolicy: Always
         args:
         - -vm
         - -bridge-iface=ens33
         - -v=3
-        - -image-novnc=rancher/vm-novnc:v0.1.0
-        - -image-tools=rancher/vm-tools:v0.1.0
-        - -image-vm=rancher/vm:v0.1.0
+        - -image-novnc=rancher/vm-novnc:v0.2.0
+        - -image-tools=rancher/vm-tools:v0.2.0
+        - -image-vm=rancher/vm:v0.2.0
       serviceAccountName: ranchervm-service-account
 ---
 apiVersion: apps/v1beta1
@@ -172,7 +172,7 @@ metadata:
   name: ip-controller
   namespace: ranchervm-system
 spec:
-  replicas: 2
+  replicas: 1
   template:
     metadata:
       labels:
@@ -190,18 +190,13 @@ spec:
       hostNetwork: true
       containers:
       - name: ip-controller
-        image: rancher/vm:v0.1.0
+        image: rancher/vm:v0.2.0
         imagePullPolicy: Always
         command: [ "sh", "-c"]
         args:
-        - exec /ranchervm -ip -nodename ${MY_NODE_NAME} -v 3
-        env:
-        - name: MY_NODE_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: spec.nodeName
+        - exec /ranchervm -ip -devicename br0 -v 3
       - name: arp-scanner
-        image: rancher/vm:v0.1.0
+        image: rancher/vm:v0.2.0
         imagePullPolicy: Always
         command: [ "bash", "-c"]
         # This is probably too aggressive for anything bigger than class 3 network
@@ -211,8 +206,8 @@ spec:
             inet_addr=$(ifconfig $iface | grep "inet " | awk '{print $2}' | cut -d':' -f2);
             inet_mask=$(ifconfig $iface | grep "inet " | awk '{print $4}' | cut -d':' -f2);
             ips="$(arp-scan -interface=$iface $inet_addr:$inet_mask | awk -F'\t' '$2 ~ /[0-9a-f][0-9a-f]:/ {print $1}')";
-            for ip in $ips; do 
-              ping -c 1 -t 1 $ip &>/dev/null & 
+            for ip in $ips; do
+              ping -c 1 -t 1 $ip &>/dev/null &
             done;
             sleep 5;
           done
@@ -224,7 +219,7 @@ metadata:
   name: backend
   namespace: ranchervm-system
 spec:
-  replicas: 2
+  replicas: 1
   template:
     metadata:
       labels:
@@ -241,7 +236,7 @@ spec:
             topologyKey: "kubernetes.io/hostname"
       containers:
       - name: backend
-        image: rancher/vm:v0.1.0
+        image: rancher/vm:v0.2.0
         imagePullPolicy: Always
         args:
         - -backend
@@ -266,7 +261,7 @@ metadata:
   name: frontend
   namespace: ranchervm-system
 spec:
-  replicas: 2
+  replicas: 1
   template:
     metadata:
       labels:
@@ -283,7 +278,7 @@ spec:
             topologyKey: "kubernetes.io/hostname"
       containers:
       - name: frontend
-        image: rancher/vm-frontend:v0.1.0
+        image: rancher/vm-frontend:v0.2.0
         imagePullPolicy: Always
 ---
 apiVersion: v1

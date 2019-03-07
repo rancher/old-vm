@@ -32,7 +32,7 @@ like `qemu-kvm` or `libvirt`. On Ubuntu 16.04, you can make sure KVM is enabled
 by checking that both devices `/dev/kvm` and `/dev/net/tun` exist.
     2. An easy way to run KVM on your Windows or Mac laptop is to use nested
 virtualization with VMware Workstation or VMware Fusion. Just enable
-"Virtualize Intel VT-x/EPT or AMD-V/RVI" in VM settings. Remember to use Ubuntu 18.04 or CentOS with latest kernel in this case, otherwise you will hit bug https://bugs.launchpad.net/qemu/+bug/1636217
+"Virtualize Intel VT-x/EPT or AMD-V/RVI" in VM settings. Remember to use Ubuntu 18.04 or CentOS with latest kernel in this case, otherwise you will hit bug that VM hanging from [`Booting from harddisk...` ](https://bugs.launchpad.net/qemu/+bug/1636217)
 3. Host bridge network has been prepared for RancherVM. See [here](https://github.com/rancher/vm/blob/master/docs/networking.md#bridge-to-the-host-network) for details.
     1. Identify your NIC name (e.g. `ens33`) on each host, and replace the value [here](https://github.com/rancher/vm/blob/master/deploy/ranchervm.yaml#L162)
     2. Identify your bridge name (e.g. `br0`) on each host, then replace the value [here](https://github.com/rancher/vm/blob/master/deploy/ranchervm.yaml#L197) and the line below contains `br0`.

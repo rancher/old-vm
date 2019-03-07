@@ -34,8 +34,8 @@ by checking that both devices `/dev/kvm` and `/dev/net/tun` exist.
 virtualization with VMware Workstation or VMware Fusion. Just enable
 "Virtualize Intel VT-x/EPT or AMD-V/RVI" in VM settings. Remember to use Ubuntu 18.04 or CentOS with latest kernel in this case, otherwise you will hit bug https://bugs.launchpad.net/qemu/+bug/1636217
 3. Host bridge network has been prepared for RancherVM. See [here](https://github.com/rancher/vm/blob/master/docs/networking.md#bridge-to-the-host-network) for details.
-    1. Identify your NIC name (e.g. `ens33` on each host, and replace the value [here](https://github.com/rancher/vm/blob/master/deploy/ranchervm.yaml#L162)
-    2. Identify your bridge name (e.g. `br0` on each host, then replace the value [here](https://github.com/rancher/vm/blob/master/deploy/ranchervm.yaml#L197) and the line below contains `br0`).
+    1. Identify your NIC name (e.g. `ens33`) on each host, and replace the value [here](https://github.com/rancher/vm/blob/master/deploy/ranchervm.yaml#L162)
+    2. Identify your bridge name (e.g. `br0`) on each host, then replace the value [here](https://github.com/rancher/vm/blob/master/deploy/ranchervm.yaml#L197) and the line below contains `br0`.
 
 Once you have Kubernetes and KVM both setup, and correctly setup the nic names, you can deploy the system:
 

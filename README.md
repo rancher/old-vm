@@ -37,7 +37,7 @@ virtualization with VMware Workstation or VMware Fusion. Just enable
     1. Identify your NIC name (e.g. `ens33` on each host, and replace the value [here](https://github.com/rancher/vm/blob/master/deploy/ranchervm.yaml#L162)
     2. Identify your bridge name (e.g. `br0` on each host, then replace the value [here](https://github.com/rancher/vm/blob/master/deploy/ranchervm.yaml#L197) and a few lines below contains `br0`.
 
-Once you have Kubernetes and KVM both setup, deploy the system:
+Once you have Kubernetes and KVM both setup, and correctly setup the nic names, you can deploy the system:
 
 ```
 kubectl create -f deploy/ranchervm.yaml
